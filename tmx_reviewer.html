@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+<title>TMX 校稿編輯器</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Noto Sans TC", "SF Pro", system-ui, sans-serif; background: #f1f5f9; color: #1e293b; }
+
+  /* --- Landing --- */
+  .landing { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); padding: 24px; }
+  .landing h1 { font-size: 20px; font-weight: 700; margin: 0 0 6px; }
+  .landing p { font-size: 13px; color: #64748b; line-height: 1.6; margin-bottom: 20px; text-align: center; }
+  .btn-primary { padding: 12px 28px; font-size: 15px; font-weight: 600; color: #fff; background: #3b82f6;
+    border: none; border-radius: 10px; cursor: pointer; box-shadow: 0 2px 8px rgba(59,130,246,0.3); }
+
+  /* --- Top bar --- */
+  .topbar { position: sticky; top: 0; z-index: 100; background: #1e293b; color: #fff; padding: 7px 10px;
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .topbar .fname { font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+  .badge { padding: 1px 6px; border-radius: 99px; font-size: 10px; display: inline-block; color: #fff; }
+  .topbar .spacer { flex: 1; }
+  .btn-sm { padding: 5px 10px; font-size: 11px; font-weight: 600; color: #fff; border: none; border-radius: 5px; cursor: pointer; }
+
+  /* --- Filters --- */
+  .filters { position: sticky; top: 38px; z-index: 99; background: #e2e8f0; padding: 5px 10px;
+    display: flex; gap: 3px; flex-wrap: wrap; align-items: center; }
+  .pill { padding: 5px 9px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 5px; cursor: pointer;
+    background: #fff; color: #475569; white-space: nowrap; }
+  .pill.active { background: #3b82f6; color: #fff; font-weight: 700; }
+  .search-input { padding: 4px 7px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 5px; width: 90px; }
+  .count { font-size: 10px; color: #64748b; }
+
+  /* --- TU card --- */
+  .tu-list { padding: 5px 6px; max-width: 1200px; margin: 0 auto; }
+  .tu-card { background: #fff; border-radius: 8px; margin-bottom: 5px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
+  .tu-card.confirmed { background: #f0f9ff; border: 1.5px solid #0ea5e9; }
+  .tu-head { display: flex; align-items: center; gap: 4px; padding: 3px 8px; background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0; font-size: 10px; }
+  .tu-card.confirmed .tu-head { background: #e0f2fe; }
+  .tu-head .spacer { flex: 1; }
+  .tag { padding: 0 5px; border-radius: 3px; font-size: 9px; font-weight: 600; color: #fff; display: inline-block; }
+  .btn-confirm { padding: 2px 8px; font-size: 10px; font-weight: 600; border: 1.5px solid #0ea5e9;
+    border-radius: 4px; cursor: pointer; background: transparent; color: #0ea5e9; }
+  .btn-confirm.on { background: #0ea5e9; color: #fff; }
+  .tu-body { display: grid; grid-template-columns: 1fr 1fr; min-height: 40px; }
+  .tu-en { padding: 6px 8px; font-size: 12.5px; line-height: 1.7; color: #334155; border-right: 1px solid #e2e8f0;
+    white-space: pre-wrap; word-break: break-word; background: #fafbfc; }
+  .tu-zh-wrap { padding: 2px 2px 2px 4px; }
+  .tu-zh { width: 100%; min-height: 36px; padding: 4px 6px; font-size: 12.5px; line-height: 1.7; color: #1e293b;
+    border: 1px solid transparent; border-radius: 4px; resize: vertical; font-family: inherit; outline: none; background: transparent; }
+  .tu-zh:focus { border-color: #3b82f6; }
+  .tu-zh.edited { background: #fefce8; }
+  .tu-zh.conf { background: #e0f2fe; }
+
+  /* --- Modal --- */
+  .modal-bg { position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,0.5);
+    display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .modal { background: #fff; border-radius: 12px; width: 100%; max-width: 700px; max-height: 85vh;
+    display: flex; flex-direction: column; overflow: hidden; }
+  .modal-head { padding: 12px 16px; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; gap: 8px; }
+  .modal-head span { font-weight: 700; font-size: 15px; }
+  .modal-body { flex: 1; overflow: auto; padding: 8px; }
+  .modal-body textarea { width: 100%; min-height: 300px; padding: 10px; font-size: 11px; font-family: monospace;
+    border: 1px solid #e2e8f0; border-radius: 6px; resize: none; color: #334155; background: #f8fafc; line-height: 1.5; }
+  .modal-foot { padding: 8px 16px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- Landing -->
+<div id="landing" class="landing">
+  <div style="text-align:center; max-width:400px;">
+    <div style="font-size:48px; margin-bottom:12px;">📋</div>
+    <h1>TMX 校稿編輯器</h1>
+    <p>中英分欄對照，按「確認」標記已核稿區段。<br>匯出後 OmegaT 可辨識 [確認] 前綴。<br>iPad Safari 可直接使用。</p>
+    <button class="btn-primary" onclick="document.getElementById('fileInput').click()">選擇 TMX 檔案</button>
+    <input type="file" id="fileInput" accept=".tmx" style="display:none">
+  </div>
+</div>
+
+<!-- Main UI (hidden initially) -->
+<div id="mainUI" class="hidden">
+  <!-- Top bar -->
+  <div class="topbar">
+    <span class="fname" id="fileName">📋</span>
+    <div id="statsBar" style="display:flex; gap:3px; font-size:10px;"></div>
+    <div class="spacer"></div>
+    <button class="btn-sm" style="background:#0ea5e9;" onclick="confirmAllVisible()">全部確認</button>
+    <button class="btn-sm" style="background:#22c55e;" onclick="doExport()">匯出 ↓</button>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters" id="filterBar"></div>
+
+  <!-- TU list -->
+  <div class="tu-list" id="tuList"></div>
+</div>
+
+<!-- Export modal -->
+<div id="exportModal" class="modal-bg hidden" onclick="closeModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <span>匯出 TMX</span>
+      <div class="spacer"></div>
+      <button class="btn-sm" style="background:#3b82f6;" onclick="downloadFile()">下載檔案 ↓</button>
+      <button class="btn-sm" id="copyBtn" style="background:#475569;" onclick="copyXML()">複製全部</button>
+      <button style="padding:6px 10px; font-size:14px; background:transparent; border:none; cursor:pointer; color:#94a3b8;" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <textarea id="exportText" readonly></textarea>
+    </div>
+    <div class="modal-foot">iPad Safari：「下載檔案」會觸發下載。如無反應，請「複製全部」後貼到文字編輯器另存為 .tmx</div>
+  </div>
+</div>
+
+<script>
+const CONFIRM_PREFIX = "[確認]";
+const SECTION_PATTERNS = [
+  [/^claims?(\s*\(\d+\))?$/i, "claims"],
+  [/^what\s+is\s+claimed\s+is\s*:?$/i, "claims"],
+  [/^the\s+invention\s+claimed\s+is\s*:?$/i, "claims"],
+  [/^abstract$/i, "abstract"],
+  [/^detailed\s+description(\s+of(\s+the)?\s+.+)?$/i, "description"],
+  [/^description$/i, "description"],
+  [/^background(\s+of(\s+the)?\s+.+)?$/i, "description"],
+  [/^summary(\s+of(\s+the)?\s+.+)?$/i, "description"],
+  [/^(technical\s+)?field(\s+of(\s+the)?\s+.+)?$/i, "description"],
+  [/^brief\s+description\s+of(\s+the)?\s+drawings?$/i, "description"],
+  [/^cross[- ]?reference\s+to\s+related\s+(applications?|patents?)$/i, "description"],
+  [/^incorporation\s+by\s+reference$/i, "description"],
+];
+const CLAIM_NUM_RE = /^\d+\.\s*$/;
+const CJK_RE = /[\u4e00-\u9fff\u3400-\u4dbf]/;
+
+const SC = {
+  claims: { border: "#f59e0b", label: "Claims", bg: "#f59e0b" },
+  description: { border: "#3b82f6", label: "Desc", bg: "#3b82f6" },
+  abstract: { border: "#22c55e", label: "Abstract", bg: "#22c55e" },
+  unknown: { border: "#9ca3af", label: "?", bg: "#9ca3af" },
+};
+
+let TUS = [];
+let DOC = null;
+let FILE_NAME = "";
+let currentFilter = "all";
+let searchText = "";
+
+function detectSection(text) {
+  const t = text.trim();
+  for (const [re, sec] of SECTION_PATTERNS) { if (re.test(t)) return sec; }
+  return null;
+}
+
+function postProcess(t) {
+  return t.replace(/圖\s+(\d)/g,"圖$1").replace(/步驟\s+(S?\d)/g,"步驟$1").replace(/請求項\s+(\d)/g,"請求項$1");
+}
+
+function parseTMX(xmlText) {
+  const parser = new DOMParser();
+  DOC = parser.parseFromString(xmlText, "text/xml");
+  TUS = [];
+  let curSec = "description";
+  DOC.querySelectorAll("tu").forEach((tu, idx) => {
+    let en = "", zh = "";
+    tu.querySelectorAll("tuv").forEach(tuv => {
+      const lang = tuv.getAttribute("xml:lang") || tuv.getAttributeNS("http://www.w3.org/XML/1998/namespace","lang") || "";
+      const seg = tuv.querySelector("seg");
+      const text = seg ? seg.textContent || "" : "";
+      if (lang.toLowerCase().startsWith("en")) en = text;
+      if (lang.toLowerCase().startsWith("zh")) zh = text;
+    });
+    const hSec = detectSection(en);
+    if (hSec) curSec = hSec;
+    const isCN = CLAIM_NUM_RE.test(en.trim());
+    const hasCJK = CJK_RE.test(en);
+    TUS.push({
+      index: idx, en, zh, section: curSec,
+      isHeader: !!hSec, skip: isCN || hasCJK,
+      skipReason: isCN ? "claim_number" : hasCJK ? "contains_cjk" : "",
+      isTranslated: zh.trim() !== "" && en.trim() !== zh.trim(),
+      confirmed: zh.startsWith(CONFIRM_PREFIX), edited: false,
+    });
+  });
+}
+
+function getFiltered() {
+  return TUS.filter(tu => {
+    if (currentFilter === "untranslated") return !tu.isTranslated && !tu.edited && !tu.skip && !tu.isHeader;
+    if (currentFilter === "claims") return tu.section === "claims";
+    if (currentFilter === "description") return tu.section === "description";
+    if (currentFilter === "edited") return tu.edited;
+    if (currentFilter === "confirmed") return tu.confirmed;
+    if (currentFilter === "unconfirmed") return (tu.isTranslated || tu.edited) && !tu.confirmed && !tu.skip;
+    if (currentFilter === "headers") return tu.isHeader;
+    if (searchText) {
+      const q = searchText.toLowerCase();
+      return tu.en.toLowerCase().includes(q) || tu.zh.toLowerCase().includes(q);
+    }
+    return true;
+  });
+}
+
+function statusOf(tu) {
+  if (tu.skip) return { c: "#9ca3af", i: "⊘" };
+  if (tu.isHeader) return { c: "#8b5cf6", i: "§" };
+  if (tu.confirmed) return { c: "#0ea5e9", i: "✔" };
+  if (tu.isTranslated || tu.edited) return { c: "#22c55e", i: "✓" };
+  return { c: "#ef4444", i: "○" };
+}
+
+// --- Rendering ---
+function renderStats() {
+  const conf = TUS.filter(t => t.confirmed).length;
+  const trans = TUS.filter(t => (t.isTranslated || t.edited) && !t.skip && !t.confirmed).length;
+  const untrans = TUS.filter(t => !t.isTranslated && !t.edited && !t.skip && !t.isHeader && !t.confirmed).length;
+  document.getElementById("statsBar").innerHTML =
+    `<span class="badge" style="background:#0ea5e9">✔${conf}</span>` +
+    `<span class="badge" style="background:#22c55e">✓${trans}</span>` +
+    `<span class="badge" style="background:#ef4444">○${untrans}</span>`;
+}
+
+function renderFilters() {
+  const bar = document.getElementById("filterBar");
+  const items = [["all","全部"],["untranslated","未翻譯"],["unconfirmed","未確認"],["confirmed","已確認"],
+    ["claims","Claims"],["description","Desc"],["edited","已編輯"]];
+  bar.innerHTML = items.map(([k,l]) =>
+    `<button class="pill ${currentFilter===k?'active':''}" onclick="setFilter('${k}')">${l}</button>`
+  ).join("") +
+    `<input class="search-input" id="searchInput" placeholder="搜尋..." value="${searchText}" oninput="onSearch(this.value)">` +
+    `<span class="count">${getFiltered().length} 筆</span>`;
+}
+
+function renderList() {
+  const list = document.getElementById("tuList");
+  const filtered = getFiltered();
+  list.innerHTML = filtered.map(tu => {
+    const sc = SC[tu.section] || SC.unknown;
+    const st = statusOf(tu);
+    const displayZh = tu.confirmed ? tu.zh.replace(CONFIRM_PREFIX, "") : tu.zh;
+    const borderL = tu.confirmed ? "#0ea5e9" : sc.border;
+    const cls = tu.confirmed ? "tu-card confirmed" : "tu-card";
+    const zhCls = tu.confirmed ? "tu-zh conf" : tu.edited ? "tu-zh edited" : "tu-zh";
+    return `<div class="${cls}" style="border-left:4px solid ${borderL}">
+      <div class="tu-head">
+        <span style="color:${st.c}; font-weight:700; font-size:12px">${st.i}</span>
+        <span style="color:#94a3b8; font-weight:600">#${tu.index}</span>
+        <span class="tag" style="background:${sc.bg}">${sc.label}</span>
+        ${tu.isHeader ? '<span class="tag" style="background:#8b5cf6">H</span>' : ''}
+        ${tu.skip ? `<span class="tag" style="background:#9ca3af">${tu.skipReason}</span>` : ''}
+        ${tu.edited && !tu.confirmed ? '<span class="tag" style="background:#f59e0b">✎</span>' : ''}
+        <div class="spacer"></div>
+        ${!tu.skip ? `<button class="btn-confirm ${tu.confirmed?'on':''}" onclick="toggleConfirm(${tu.index})">${tu.confirmed ? '✔ 已確認' : '確認'}</button>` : ''}
+      </div>
+      <div class="tu-body">
+        <div class="tu-en">${escHtml(tu.en)}</div>
+        <div class="tu-zh-wrap">
+          <textarea class="${zhCls}" data-idx="${tu.index}"
+            onfocus="this.style.borderColor='#3b82f6'"
+            onblur="this.style.borderColor='transparent'; onZhBlur(${tu.index})"
+            oninput="onZhInput(${tu.index}, this.value)">${escHtml(displayZh)}</textarea>
+        </div>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+function render() { renderStats(); renderFilters(); renderList(); }
+
+// --- Actions ---
+function setFilter(f) { currentFilter = f; searchText = ""; render(); }
+function onSearch(v) { searchText = v; currentFilter = v ? "search" : "all"; renderStats(); renderList();
+  document.querySelectorAll(".pill").forEach(p => p.classList.remove("active"));
+}
+
+function onZhInput(idx, val) {
+  const tu = TUS[idx];
+  tu.zh = tu.confirmed ? CONFIRM_PREFIX + val : val;
+  tu.edited = true;
+  tu.confirmed = tu.zh.startsWith(CONFIRM_PREFIX);
+  tu.isTranslated = tu.zh.trim() !== "" && tu.en.trim() !== tu.zh.trim();
+  renderStats();
+}
+
+function onZhBlur(idx) {
+  const tu = TUS[idx];
+  const hasP = tu.zh.startsWith(CONFIRM_PREFIX);
+  const body = hasP ? tu.zh.slice(CONFIRM_PREFIX.length) : tu.zh;
+  const cleaned = postProcess(body);
+  tu.zh = hasP ? CONFIRM_PREFIX + cleaned : cleaned;
+  if (cleaned !== body) { tu.edited = true; render(); }
+}
+
+function toggleConfirm(idx) {
+  const tu = TUS[idx];
+  if (tu.confirmed) {
+    tu.zh = tu.zh.startsWith(CONFIRM_PREFIX) ? tu.zh.slice(CONFIRM_PREFIX.length) : tu.zh;
+    tu.confirmed = false;
+  } else {
+    tu.zh = CONFIRM_PREFIX + postProcess(tu.zh);
+    tu.confirmed = true;
+  }
+  tu.edited = true;
+  tu.isTranslated = tu.zh.trim() !== "" && tu.en.trim() !== tu.zh.trim();
+  render();
+}
+
+function confirmAllVisible() {
+  const vis = new Set(getFiltered().map(t => t.index));
+  TUS.forEach(tu => {
+    if (!vis.has(tu.index) || tu.skip || tu.confirmed || (!tu.isTranslated && !tu.edited)) return;
+    tu.zh = CONFIRM_PREFIX + postProcess(tu.zh);
+    tu.confirmed = true; tu.edited = true;
+  });
+  render();
+}
+
+// --- Export ---
+function buildXML() {
+  const els = DOC.querySelectorAll("tu");
+  TUS.forEach(tu => {
+    if (!tu.edited) return;
+    els[tu.index]?.querySelectorAll("tuv").forEach(tuv => {
+      const lang = tuv.getAttribute("xml:lang") || tuv.getAttributeNS("http://www.w3.org/XML/1998/namespace","lang") || "";
+      if (lang.toLowerCase().startsWith("zh")) {
+        const seg = tuv.querySelector("seg");
+        if (seg) seg.textContent = tu.zh;
+      }
+    });
+  });
+  let xml = new XMLSerializer().serializeToString(DOC);
+  if (!xml.startsWith("<?xml")) xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + xml;
+  return xml;
+}
+
+function doExport() {
+  const xml = buildXML();
+  document.getElementById("exportText").value = xml;
+  document.getElementById("exportModal").classList.remove("hidden");
+}
+
+function closeModal() { document.getElementById("exportModal").classList.add("hidden"); }
+
+function downloadFile() {
+  const xml = document.getElementById("exportText").value;
+  const name = FILE_NAME.replace(/\.tmx$/i, "_reviewed.tmx");
+  try {
+    const blob = new Blob([xml], { type: "application/xml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch(e) {
+    // fallback: data URI
+    const a = document.createElement("a");
+    a.href = "data:application/xml;charset=utf-8," + encodeURIComponent(xml);
+    a.download = name;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+  }
+}
+
+function copyXML() {
+  const ta = document.getElementById("exportText");
+  const btn = document.getElementById("copyBtn");
+  try {
+    navigator.clipboard.writeText(ta.value).then(() => {
+      btn.textContent = "✓ 已複製"; btn.style.background = "#22c55e";
+      setTimeout(() => { btn.textContent = "複製全部"; btn.style.background = "#475569"; }, 2000);
+    });
+  } catch {
+    ta.select(); document.execCommand("copy");
+    btn.textContent = "✓ 已複製"; btn.style.background = "#22c55e";
+    setTimeout(() => { btn.textContent = "複製全部"; btn.style.background = "#475569"; }, 2000);
+  }
+}
+
+// --- File load ---
+document.getElementById("fileInput").addEventListener("change", function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  FILE_NAME = file.name;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    parseTMX(ev.target.result);
+    document.getElementById("landing").classList.add("hidden");
+    document.getElementById("mainUI").classList.remove("hidden");
+    document.getElementById("fileName").textContent = "📋 " + FILE_NAME;
+    render();
+  };
+  reader.readAsText(file, "UTF-8");
+});
+</script>
+</body>
+</html>
