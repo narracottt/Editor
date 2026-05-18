@@ -87,6 +87,57 @@
   }
   .export-btn:hover { color: var(--accent); }
 
+  /* ── Search/Replace bar ── */
+  .search-bar {
+    display: none; padding: 6px 16px; gap: 6px; align-items: center; flex-wrap: wrap;
+    border-bottom: 1px solid var(--border);
+    background: var(--toolbar-bg); backdrop-filter: blur(14px);
+    font-size: 13px;
+  }
+  .search-bar.show { display: flex; }
+  .search-bar input[type="text"] {
+    padding: 5px 10px; border: 1px solid var(--border); border-radius: 5px;
+    font-size: 13px; font-family: 'JetBrains Mono', monospace;
+    background: var(--editor-bg); color: var(--text); outline: none;
+    width: 220px; transition: border-color .15s;
+  }
+  .search-bar input[type="text"]:focus { border-color: var(--accent); }
+  .search-bar input[type="text"]::placeholder { color: var(--muted); }
+  .search-bar .s-btn {
+    padding: 4px 10px; border: 1px solid var(--border); border-radius: 5px;
+    cursor: pointer; font-size: 12px; font-family: inherit;
+    background: transparent; color: var(--muted); transition: all .15s;
+  }
+  .search-bar .s-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
+  .search-bar .s-info { font-size: 11px; color: var(--muted); min-width: 60px; }
+  .search-bar .s-close {
+    padding: 4px 8px; border: none; border-radius: 5px; cursor: pointer;
+    font-size: 15px; background: transparent; color: var(--muted);
+    transition: color .15s; margin-left: auto;
+  }
+  .search-bar .s-close:hover { color: var(--accent); }
+  .search-bar .s-toggle {
+    padding: 3px 7px; border: 1px solid var(--border); border-radius: 4px;
+    cursor: pointer; font-size: 11px; font-family: 'JetBrains Mono', monospace;
+    background: transparent; color: var(--muted); transition: all .15s;
+  }
+  .search-bar .s-toggle.on {
+    background: var(--accent); color: #fff; border-color: var(--accent);
+  }
+  .search-bar .s-toggle:hover:not(.on) { border-color: var(--accent); color: var(--accent); }
+  .search-bar .s-row { display: flex; align-items: center; gap: 6px; width: 100%; }
+  .search-bar .s-row:nth-child(2) { margin-top: 2px; }
+  .search-bar .s-row.s-hidden { display: none; }
+
+  /* ── Search highlight in preview ── */
+  .preview-pane mark.search-hl {
+    background: rgba(255, 213, 0, .4); color: inherit;
+    border-radius: 2px; padding: 0 1px;
+  }
+  .preview-pane mark.search-hl-active {
+    background: rgba(255, 140, 0, .6);
+  }
+
   /* ── Main area ── */
   .main { flex: 1; display: flex; overflow: hidden; }
 
@@ -222,13 +273,33 @@
   <button class="tool-btn" onclick="ins('\n---\n','')">—</button>
   <div class="divider"></div>
   <button class="tool-btn" id="noOlBtn" onclick="toggleNoOl()" title="停用數字列表解析（專利模式）">1.⃠</button>
+  <button class="tool-btn" onclick="toggleSearch(true)" title="搜尋取代 (Ctrl+H)">⌕</button>
   <input type="file" id="fileInput" accept=".md,.markdown,.txt" hidden>
   <div class="tool-spacer"></div>
+  <button class="export-btn" onclick="newFile()">📄 新增</button>
   <button class="export-btn" onclick="openFile()">📂 開啟</button>
   <div class="divider"></div>
   <button class="export-btn" onclick="downloadMd()">⬇ .md</button>
   <button class="export-btn" onclick="downloadHtml()">⬇ .html</button>
   <button class="export-btn" onclick="copyHtml()">📋 HTML</button>
+</div>
+
+<!-- Search/Replace bar -->
+<div class="search-bar" id="searchBar">
+  <div class="s-row">
+    <input type="text" id="searchInput" placeholder="搜尋…" autocomplete="off" spellcheck="false">
+    <button class="s-toggle" id="sCaseBtn" onclick="toggleCase()" onmousedown="event.preventDefault()" title="區分大小寫">Aa</button>
+    <button class="s-toggle" id="sRegexBtn" onclick="toggleRegex()" onmousedown="event.preventDefault()" title="正規表示式">.*</button>
+    <span class="s-info" id="searchInfo"></span>
+    <button class="s-btn" onclick="searchPrev()" onmousedown="event.preventDefault()">▲</button>
+    <button class="s-btn" onclick="searchNext()" onmousedown="event.preventDefault()">▼</button>
+    <button class="s-close" onclick="closeSearch()">✕</button>
+  </div>
+  <div class="s-row" id="replaceRow">
+    <input type="text" id="replaceInput" placeholder="取代…" autocomplete="off" spellcheck="false">
+    <button class="s-btn" onclick="replaceCurrent()" onmousedown="event.preventDefault()">取代</button>
+    <button class="s-btn" onclick="replaceAll()" onmousedown="event.preventDefault()">全部取代</button>
+  </div>
 </div>
 
 <!-- Main -->
@@ -357,7 +428,7 @@ function greet(name) {
 - [ ] 匯出 HTML
 - [ ] 深色模式
 
-> 💡 快捷鍵：Ctrl+B 粗體、Ctrl+I 斜體、Ctrl+K 連結、Ctrl+O 開檔、Ctrl+S 存檔
+> 💡 快捷鍵：Ctrl+B 粗體、Ctrl+I 斜體、Ctrl+K 連結、Ctrl+F 搜尋、Ctrl+H 搜尋取代、Ctrl+O 開檔、Ctrl+S 存檔
 
 ---
 
@@ -367,6 +438,7 @@ function greet(name) {
 function render() {
   preview.innerHTML = parseMd(editor.value);
   updateStats();
+  if (searchBar.classList.contains('show') && searchInput.value) highlightPreview();
   try { localStorage.setItem('md-edit-content', editor.value); } catch(e) {}
 }
 
@@ -408,6 +480,205 @@ function toggleNoOl() {
   showToast(noOl ? '已停用數字列表（專利模式）' : '已啟用數字列表');
 }
 
+// ── Search / Replace ──
+const searchBar = document.getElementById('searchBar');
+const searchInput = document.getElementById('searchInput');
+const replaceInput = document.getElementById('replaceInput');
+const searchInfo = document.getElementById('searchInfo');
+let sCase = false, sRegex = false, sMatches = [], sIdx = -1;
+
+function toggleSearch(withReplace) {
+  const visible = searchBar.classList.contains('show');
+  const replaceRow = document.getElementById('replaceRow');
+  if (!visible) {
+    searchBar.classList.add('show');
+    replaceRow.classList.toggle('s-hidden', !withReplace);
+    // Pre-fill with selection
+    const sel = editor.value.substring(editor.selectionStart, editor.selectionEnd);
+    if (sel && sel.length < 200 && !sel.includes('\n')) searchInput.value = sel;
+    searchInput.focus();
+    searchInput.select();
+    doSearch();
+  } else {
+    // If already open, toggle replace row visibility or just re-focus
+    if (withReplace) replaceRow.classList.remove('s-hidden');
+    searchInput.focus();
+    searchInput.select();
+  }
+}
+
+function closeSearch() {
+  searchBar.classList.remove('show');
+  sMatches = []; sIdx = -1;
+  searchInfo.textContent = '';
+  clearPreviewHighlights();
+  editor.focus();
+}
+
+function toggleCase() { sCase = !sCase; document.getElementById('sCaseBtn').classList.toggle('on', sCase); doSearch(); }
+function toggleRegex() { sRegex = !sRegex; document.getElementById('sRegexBtn').classList.toggle('on', sRegex); doSearch(); }
+
+function doSearch() {
+  const q = searchInput.value;
+  sMatches = []; sIdx = -1;
+  if (!q) { searchInfo.textContent = ''; clearPreviewHighlights(); return; }
+
+  try {
+    const flags = sCase ? 'g' : 'gi';
+    const re = sRegex ? new RegExp(q, flags) : new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags);
+    let m;
+    while ((m = re.exec(editor.value)) !== null) {
+      sMatches.push({ start: m.index, end: m.index + m[0].length });
+      if (m[0].length === 0) re.lastIndex++; // prevent infinite loop on zero-width match
+    }
+  } catch(e) {
+    searchInfo.textContent = '正規式錯誤';
+    return;
+  }
+
+  if (sMatches.length === 0) {
+    searchInfo.textContent = '0 筆';
+    clearPreviewHighlights();
+    return;
+  }
+
+  // Find nearest match from cursor
+  const cursor = editor.selectionStart;
+  sIdx = sMatches.findIndex(m => m.start >= cursor);
+  if (sIdx === -1) sIdx = 0;
+  highlightMatch(false);
+  highlightPreview();
+}
+
+function highlightMatch(focusEditor = true) {
+  if (sMatches.length === 0 || sIdx < 0) return;
+  const m = sMatches[sIdx];
+  searchInfo.textContent = `${sIdx + 1} / ${sMatches.length}`;
+
+  // Scroll editor to show match area
+  const linesBefore = editor.value.substring(0, m.start).split('\n').length;
+  const totalLines = editor.value.split('\n').length;
+  const targetScroll = Math.max(0,
+    ((linesBefore - 1) / totalLines) * editor.scrollHeight - editor.clientHeight / 3
+  );
+  editor.scrollTop = targetScroll;
+
+  // Only steal focus & select when navigating (▲▼ / Enter), not while typing in search
+  if (focusEditor) {
+    editor.focus({ preventScroll: true });
+    requestAnimationFrame(() => {
+      editor.setSelectionRange(m.start, m.end);
+    });
+  }
+}
+
+// ── Preview highlight ──
+function clearPreviewHighlights() {
+  preview.querySelectorAll('mark.search-hl, mark.search-hl-active').forEach(m => {
+    m.replaceWith(document.createTextNode(m.textContent));
+  });
+  preview.normalize();
+}
+
+function highlightPreview() {
+  clearPreviewHighlights();
+  const q = searchInput.value;
+  if (!q) return;
+
+  let re;
+  try {
+    const flags = sCase ? 'g' : 'gi';
+    re = sRegex ? new RegExp(q, flags) : new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags);
+  } catch(e) { return; }
+
+  // Walk all text nodes in preview
+  const walker = document.createTreeWalker(preview, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+
+  nodes.forEach(node => {
+    // Skip pre/code blocks
+    if (node.parentElement && node.parentElement.closest('pre')) return;
+    const text = node.textContent;
+    re.lastIndex = 0;
+    if (!re.test(text)) return;
+    re.lastIndex = 0;
+
+    const frag = document.createDocumentFragment();
+    let last = 0, match;
+    while ((match = re.exec(text)) !== null) {
+      if (match.index > last) frag.appendChild(document.createTextNode(text.substring(last, match.index)));
+      const mark = document.createElement('mark');
+      mark.className = 'search-hl';
+      mark.textContent = match[0];
+      frag.appendChild(mark);
+      last = re.lastIndex;
+      if (match[0].length === 0) re.lastIndex++;
+    }
+    if (last < text.length) frag.appendChild(document.createTextNode(text.substring(last)));
+    node.replaceWith(frag);
+  });
+}
+
+function searchNext() {
+  if (sMatches.length === 0) { doSearch(); return; }
+  sIdx = (sIdx + 1) % sMatches.length;
+  highlightMatch();
+}
+
+function searchPrev() {
+  if (sMatches.length === 0) { doSearch(); return; }
+  sIdx = (sIdx - 1 + sMatches.length) % sMatches.length;
+  highlightMatch();
+}
+
+function replaceCurrent() {
+  if (sMatches.length === 0 || sIdx < 0) return;
+  const m = sMatches[sIdx];
+  const r = replaceInput.value;
+  editor.value = editor.value.substring(0, m.start) + r + editor.value.substring(m.end);
+  // Adjust cursor
+  editor.selectionStart = editor.selectionEnd = m.start + r.length;
+  render();
+  doSearch();
+  if (sMatches.length > 0) {
+    // Stay at same index or wrap
+    if (sIdx >= sMatches.length) sIdx = 0;
+    highlightMatch();
+  }
+}
+
+function replaceAll() {
+  const q = searchInput.value;
+  const r = replaceInput.value;
+  if (!q) return;
+  try {
+    const flags = sCase ? 'g' : 'gi';
+    const re = sRegex ? new RegExp(q, flags) : new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags);
+    const count = (editor.value.match(re) || []).length;
+    editor.value = editor.value.replace(re, r);
+    render();
+    doSearch();
+    showToast(`已取代 ${count} 筆`);
+  } catch(e) {
+    showToast('正規式錯誤');
+  }
+}
+
+// Live search on input
+searchInput.addEventListener('input', doSearch);
+
+// Search bar keyboard
+searchInput.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeSearch(); e.preventDefault(); }
+  if (e.key === 'Enter' && !e.shiftKey) { searchNext(); e.preventDefault(); }
+  if (e.key === 'Enter' && e.shiftKey) { searchPrev(); e.preventDefault(); }
+});
+replaceInput.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeSearch(); e.preventDefault(); }
+  if (e.key === 'Enter') { replaceCurrent(); e.preventDefault(); }
+});
+
 // ── Insert markdown ──
 function ins(prefix, suffix) {
   const s = editor.selectionStart, e = editor.selectionEnd;
@@ -419,7 +690,7 @@ function ins(prefix, suffix) {
   render();
 }
 
-// ── Keyboard shortcuts ──
+// ── Keyboard shortcuts (editor) ──
 editor.addEventListener('keydown', e => {
   if (e.ctrlKey || e.metaKey) {
     if (e.key === 'b') { e.preventDefault(); ins('**','**'); }
@@ -435,6 +706,29 @@ editor.addEventListener('keydown', e => {
     editor.selectionStart = editor.selectionEnd = s + 2;
     render();
   }
+  if (e.key === 'F3' && !e.ctrlKey) { e.preventDefault(); e.shiftKey ? searchPrev() : searchNext(); }
+});
+
+// ── Global shortcuts (Ctrl+F / Ctrl+H / F3 / Esc) ──
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+    e.preventDefault();
+    toggleSearch(false);
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'h') {
+    e.preventDefault();
+    toggleSearch(true);
+  }
+  if (e.key === 'Escape' && searchBar.classList.contains('show')) {
+    closeSearch();
+  }
+  // F3 works globally (search box, replace box, editor, anywhere)
+  if (e.key === 'F3' && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    if (searchBar.classList.contains('show')) {
+      e.shiftKey ? searchPrev() : searchNext();
+    }
+  }
 });
 
 // ── Sync scroll ──
@@ -443,6 +737,15 @@ editor.addEventListener('scroll', () => {
   const ratio = editor.scrollTop / (editor.scrollHeight - editor.clientHeight || 1);
   preview.scrollTop = ratio * (preview.scrollHeight - preview.clientHeight);
 });
+
+// ── New file ──
+function newFile() {
+  if (editor.value.trim() && !confirm('目前內容尚未儲存，確定要開新文件嗎？')) return;
+  editor.value = '';
+  render();
+  editor.focus();
+  showToast('已開新文件');
+}
 
 // ── Open file ──
 function openFile() {
