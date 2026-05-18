@@ -74,6 +74,11 @@
     background: var(--accent-bg); color: var(--accent);
     border-color: rgba(91,95,199,.2);
   }
+  .tool-btn.toggle-on {
+    background: var(--accent); color: #fff;
+    border-color: var(--accent);
+  }
+  .tool-btn.toggle-on:hover { filter: brightness(1.1); }
   .tool-spacer { flex: 1; }
   .export-btn {
     padding: 4px 10px; border: none; border-radius: 5px; cursor: pointer;
@@ -126,18 +131,16 @@
     border-left: 4px solid var(--accent); margin: 12px 0; padding: 8px 16px;
     background: var(--accent-bg); border-radius: 0 8px 8px 0; color: var(--muted);
   }
-  .preview-pane pre.code-block {
+  .preview-pane pre {
     background: var(--code-bg); padding: 16px 20px; border-radius: 10px;
     overflow-x: auto; margin: 12px 0; font-family: 'JetBrains Mono', monospace;
     font-size: 13px; line-height: 1.6; border: 1px solid var(--border);
     white-space: pre;
   }
-  .preview-pane pre.code-block::before {
-    content: attr(data-lang); display: block; font-size: 11px;
-    color: var(--muted); text-transform: uppercase; letter-spacing: 1px;
-    margin-bottom: 8px;
+  .preview-pane pre code {
+    background: none; padding: 0; border: none; font-size: inherit;
   }
-  .preview-pane code.inline-code {
+  .preview-pane :not(pre) > code {
     background: var(--code-bg); padding: 2px 7px; border-radius: 5px;
     font-family: 'JetBrains Mono', monospace; font-size: .88em;
     border: 1px solid var(--border);
@@ -217,9 +220,11 @@
   <button class="tool-btn" onclick="ins('- ','')">☰</button>
   <button class="tool-btn" onclick="ins('> ','')">❝</button>
   <button class="tool-btn" onclick="ins('\n---\n','')">—</button>
+  <div class="divider"></div>
+  <button class="tool-btn" id="noOlBtn" onclick="toggleNoOl()" title="停用數字列表解析（專利模式）">1.⃠</button>
+  <input type="file" id="fileInput" accept=".md,.markdown,.txt" hidden>
   <div class="tool-spacer"></div>
-  <input type="file" id="fileInput" accept=".md,.txt,.markdown" style="display:none" onchange="openFile(this)">
-  <button class="export-btn" onclick="document.getElementById('fileInput').click()">📂 開啟</button>
+  <button class="export-btn" onclick="openFile()">📂 開啟</button>
   <div class="divider"></div>
   <button class="export-btn" onclick="downloadMd()">⬇ .md</button>
   <button class="export-btn" onclick="downloadHtml()">⬇ .html</button>
@@ -234,15 +239,31 @@
   <div class="preview-pane" id="preview"></div>
 </div>
 
+<!-- markdown-it CDN (primary parser) -->
+<script src="https://cdn.jsdelivr.net/npm/markdown-it/dist/markdown-it.min.js"></script>
+
 <script>
-// ── Markdown parser ──
-function parseMd(src) {
+// ── Parser setup ──
+let md = null;
+let noOl = true; // 預設開啟：停用有序列表解析（適合專利文件）
+
+if (window.markdownit) {
+  md = window.markdownit({ html: true, breaks: false, linkify: true, typographer: false });
+}
+
+// Preprocess: escape "N." at line start so markdown-it won't create <ol>
+function escapeOrderedList(src) {
+  return src.replace(/^(\d+)[．.]\s/gm, '$1&#46; ');
+}
+
+// Fallback hand-written parser (offline / CDN fail)
+function fallbackParseMd(src) {
   let h = src;
   h = h.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
     const esc = code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').trimEnd();
-    return `<pre class="code-block" data-lang="${lang}"><code>${esc}</code></pre>`;
+    return `<pre data-lang="${lang}"><code>${esc}</code></pre>`;
   });
-  h = h.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
+  h = h.replace(/`([^`]+)`/g, '<code>$1</code>');
   h = h.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img alt="$1" src="$2"/>');
   h = h.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
   h = h.replace(/^######\s+(.+)$/gm, '<h6>$1</h6>');
@@ -261,9 +282,11 @@ function parseMd(src) {
   h = h.replace(/^[\-\*]\s\[\s?\]\s+(.+)$/gm, '<div class="task"><input type="checkbox" disabled/><span>$1</span></div>');
   h = h.replace(/^[\-\*]\s+(.+)$/gm, '<li>$1</li>');
   h = h.replace(/((?:<li>.*<\/li>\n?)+)/g, '<ul>$1</ul>');
-  h = h.replace(/^\d+\.\s+(.+)$/gm, '<oli>$1</oli>');
-  h = h.replace(/((?:<oli>.*<\/oli>\n?)+)/g, m =>
-    '<ol>' + m.replace(/<\/?oli>/g, t => t.replace('oli','li')) + '</ol>');
+  if (!noOl) {
+    h = h.replace(/^\d+\.\s+(.+)$/gm, '<oli>$1</oli>');
+    h = h.replace(/((?:<oli>.*<\/oli>\n?)+)/g, m =>
+      '<ol>' + m.replace(/<\/?oli>/g, t => t.replace('oli','li')) + '</ol>');
+  }
   h = h.replace(/^(\|.+\|)\n(\|[\s\-:|]+\|)\n((?:\|.+\|\n?)+)/gm, (_, hdr, _a, body) => {
     const hc = hdr.split('|').filter(c=>c.trim());
     const rows = body.trim().split('\n');
@@ -280,6 +303,14 @@ function parseMd(src) {
   h = h.replace(/<p>(<(?:h[1-6]|ul|ol|li|blockquote|pre|hr|table|div))/g,'$1');
   h = h.replace(/(<\/(?:h[1-6]|ul|ol|li|blockquote|pre|hr|table|div)>)<\/p>/g,'$1');
   return h;
+}
+
+function parseMd(src) {
+  if (md) {
+    const processed = noOl ? escapeOrderedList(src) : src;
+    return md.render(processed);
+  }
+  return fallbackParseMd(src);
 }
 
 // ── State ──
@@ -326,7 +357,7 @@ function greet(name) {
 - [ ] 匯出 HTML
 - [ ] 深色模式
 
-> 💡 提示：Ctrl+B 粗體、Ctrl+I 斜體、Ctrl+K 連結
+> 💡 快捷鍵：Ctrl+B 粗體、Ctrl+I 斜體、Ctrl+K 連結、Ctrl+O 開檔、Ctrl+S 存檔
 
 ---
 
@@ -336,7 +367,6 @@ function greet(name) {
 function render() {
   preview.innerHTML = parseMd(editor.value);
   updateStats();
-  // persist
   try { localStorage.setItem('md-edit-content', editor.value); } catch(e) {}
 }
 
@@ -369,6 +399,15 @@ function toggleTheme() {
   try { localStorage.setItem('md-edit-dark', isDark ? '1' : '0'); } catch(e) {}
 }
 
+// ── No-OL toggle ──
+function toggleNoOl() {
+  noOl = !noOl;
+  document.getElementById('noOlBtn').classList.toggle('toggle-on', noOl);
+  try { localStorage.setItem('md-edit-no-ol', noOl ? '1' : '0'); } catch(e) {}
+  render();
+  showToast(noOl ? '已停用數字列表（專利模式）' : '已啟用數字列表');
+}
+
 // ── Insert markdown ──
 function ins(prefix, suffix) {
   const s = editor.selectionStart, e = editor.selectionEnd;
@@ -387,7 +426,7 @@ editor.addEventListener('keydown', e => {
     if (e.key === 'i') { e.preventDefault(); ins('*','*'); }
     if (e.key === 'k') { e.preventDefault(); ins('[','](url)'); }
     if (e.key === 's') { e.preventDefault(); downloadMd(); }
-    if (e.key === 'o') { e.preventDefault(); document.getElementById('fileInput').click(); }
+    if (e.key === 'o') { e.preventDefault(); openFile(); }
   }
   if (e.key === 'Tab') {
     e.preventDefault();
@@ -406,31 +445,46 @@ editor.addEventListener('scroll', () => {
 });
 
 // ── Open file ──
-function openFile(input) {
-  const file = input.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = ev => { editor.value = ev.target.result; render(); showToast(`已開啟 ${file.name}`); };
-  reader.readAsText(file);
-  input.value = '';
+function openFile() {
+  document.getElementById('fileInput').click();
 }
 
+const fileInput = document.getElementById('fileInput');
+fileInput.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    editor.value = ev.target.result;
+    render();
+    showToast(`已開啟 ${file.name}`);
+  };
+  reader.onerror = () => showToast('檔案讀取失敗');
+  reader.readAsText(file, 'utf-8');
+  fileInput.value = '';
+});
+
 // ── Export ──
+// Clean up &#46; entities injected by escapeOrderedList() so exported HTML has real dots
+function cleanExport(html) { return html.replace(/&#46;/g, '.'); }
+
 function downloadMd() {
   dl(editor.value, 'document.md', 'text/markdown');
 }
 function downloadHtml() {
+  const body = cleanExport(parseMd(editor.value));
   const full = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Markdown Export</title>
 <style>body{font-family:-apple-system,'Noto Sans TC',sans-serif;max-width:800px;margin:40px auto;padding:0 20px;line-height:1.8;color:#1a1a2e}
 pre{background:#f4f4f8;padding:16px;border-radius:8px;overflow-x:auto;font-family:'JetBrains Mono',monospace;font-size:13px}
+pre code{background:none;padding:0;border:none}
 code{background:#f4f4f8;padding:2px 6px;border-radius:4px;font-size:.9em}
 table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px 12px;text-align:left}th{background:#f8f8fc}
 blockquote{border-left:4px solid #5b5fc7;margin:0;padding:8px 16px;background:#f8f8fc}
-a{color:#5b5fc7}</style></head><body>${parseMd(editor.value)}</body></html>`;
+a{color:#5b5fc7}</style></head><body>${body}</body></html>`;
   dl(full, 'document.html', 'text/html');
 }
 function copyHtml() {
-  navigator.clipboard.writeText(parseMd(editor.value)).then(() => showToast('HTML 已複製！'));
+  navigator.clipboard.writeText(cleanExport(parseMd(editor.value))).then(() => showToast('HTML 已複製！'));
 }
 function dl(content, name, type) {
   const blob = new Blob([content], {type});
@@ -456,27 +510,44 @@ function showToast(msg) {
 // ── Drag & drop .md file ──
 const overlay = document.getElementById('dropOverlay');
 let dragCounter = 0;
-document.addEventListener('dragenter', e => { e.preventDefault(); dragCounter++; overlay.classList.add('show'); });
-document.addEventListener('dragleave', e => { e.preventDefault(); dragCounter--; if(dragCounter<=0){overlay.classList.remove('show');dragCounter=0;} });
-document.addEventListener('dragover', e => e.preventDefault());
+
+['dragenter', 'dragover'].forEach(evt => {
+  document.addEventListener(evt, e => {
+    e.preventDefault(); e.stopPropagation();
+    dragCounter++;
+    overlay.classList.add('show');
+  });
+});
+
+document.addEventListener('dragleave', e => {
+  e.preventDefault(); e.stopPropagation();
+  dragCounter--;
+  if (dragCounter <= 0) { overlay.classList.remove('show'); dragCounter = 0; }
+});
+
 document.addEventListener('drop', e => {
-  e.preventDefault(); dragCounter = 0; overlay.classList.remove('show');
+  e.preventDefault(); e.stopPropagation();
+  dragCounter = 0; overlay.classList.remove('show');
   const file = e.dataTransfer.files[0];
-  if (file && (file.name.endsWith('.md') || file.name.endsWith('.txt') || file.name.endsWith('.markdown'))) {
-    const reader = new FileReader();
-    reader.onload = ev => { editor.value = ev.target.result; render(); showToast(`已載入 ${file.name}`); };
-    reader.readAsText(file);
-  }
+  if (!file) return;
+  const ok = file.name.endsWith('.md') || file.name.endsWith('.markdown') || file.name.endsWith('.txt');
+  if (!ok) { showToast('僅支援 Markdown / TXT'); return; }
+  const reader = new FileReader();
+  reader.onload = ev => { editor.value = ev.target.result; render(); showToast(`已載入 ${file.name}`); };
+  reader.onerror = () => showToast('檔案讀取失敗');
+  reader.readAsText(file, 'utf-8');
 });
 
 // ── Init ──
 (function init() {
-  // Restore content
   try {
     const saved = localStorage.getItem('md-edit-content');
     if (saved) editor.value = saved;
     if (localStorage.getItem('md-edit-dark') === '1') toggleTheme();
+    const savedNoOl = localStorage.getItem('md-edit-no-ol');
+    if (savedNoOl !== null) noOl = savedNoOl === '1';
   } catch(e) {}
+  document.getElementById('noOlBtn').classList.toggle('toggle-on', noOl);
   editor.addEventListener('input', render);
   render();
 })();
