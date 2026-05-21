@@ -155,7 +155,7 @@ function parseTMX(xmlText) {
   DOC.querySelectorAll("tu").forEach((tu, idx) => {
     let en = "", zh = "";
     tu.querySelectorAll("tuv").forEach(tuv => {
-      const lang = tuv.getAttribute("xml:lang") || tuv.getAttributeNS("http://www.w3.org/XML/1998/namespace","lang") || "";
+      const lang = tuv.getAttribute("xml:lang") || tuv.getAttributeNS("http://www.w3.org/XML/1998/namespace","lang") || tuv.getAttribute("lang") || "";
       const seg = tuv.querySelector("seg");
       const text = seg ? seg.textContent || "" : "";
       if (lang.toLowerCase().startsWith("en")) en = text;
@@ -313,7 +313,7 @@ function buildXML() {
   TUS.forEach(tu => {
     if (!tu.edited) return;
     els[tu.index]?.querySelectorAll("tuv").forEach(tuv => {
-      const lang = tuv.getAttribute("xml:lang") || tuv.getAttributeNS("http://www.w3.org/XML/1998/namespace","lang") || "";
+      const lang = tuv.getAttribute("xml:lang") || tuv.getAttributeNS("http://www.w3.org/XML/1998/namespace","lang") || tuv.getAttribute("lang") || "";
       if (lang.toLowerCase().startsWith("zh")) {
         const seg = tuv.querySelector("seg");
         if (seg) seg.textContent = tu.zh;
