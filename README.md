@@ -23,6 +23,7 @@ Markdown 即時預覽編輯器。
 
 TMX 翻譯記憶庫校對工具。
 
+**針對OmegaT開發。
 **使用方式**：下載 `tmx_reviewer.html`，用瀏覽器開啟即可。
 
 ---
