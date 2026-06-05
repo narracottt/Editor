@@ -14,7 +14,6 @@ Markdown 即時預覽編輯器。
 - 全文搜尋與取代
 - 匯出 .md / .html
 - 深色模式
-https://narracottt.github.io/Editor/markdown-editor.html
 
 **使用方式**：
 - [開啟 markdown-editor](https://narracottt.github.io/Editor/markdown-editor.html)
