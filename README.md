@@ -1,0 +1,31 @@
+# 🛠 Editor Tools
+
+兩個純前端單檔工具，下載即用，無需安裝。
+
+---
+
+## 📝 markdown-editor.html
+
+Markdown 即時預覽編輯器。
+
+**功能**
+- 即時分割預覽 / 純編輯 / 純預覽三種模式
+- 支援 Mermaid 流程圖（含 render cache 與語法驗證）
+- 全文搜尋與取代
+- 匯出 .md / .html
+- 深色模式
+
+**使用方式**：下載 `markdown-editor.html`，用瀏覽器開啟即可。
+
+---
+
+## 🔍 tmx_reviewer.html
+
+TMX 翻譯記憶庫校對工具。
+
+**使用方式**：下載 `tmx_reviewer.html`，用瀏覽器開啟即可。
+
+---
+
+## 授權
+MIT
