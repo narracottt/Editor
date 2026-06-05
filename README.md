@@ -16,9 +16,12 @@ Markdown 即時預覽編輯器。
 - 深色模式
 https://narracottt.github.io/Editor/markdown-editor.html
 
-**使用方式**：下載 `markdown-editor.html`，用瀏覽器開啟即可。
+**使用方式**：
+- [開啟 markdown-editor](https://narracottt.github.io/Editor/markdown-editor.html)
+- 下載 `markdown-editor.html`，用瀏覽器開啟即可。
+
 <img width="1872" height="903" alt="markdown-editor" src="https://github.com/user-attachments/assets/c05f43f5-9550-439a-bdcd-33955d00143f" />
-[開啟 markdown-editor](https://narracottt.github.io/Editor/markdown-editor.html)
+
 
 ---
 
@@ -27,8 +30,10 @@ https://narracottt.github.io/Editor/markdown-editor.html
 TMX 翻譯記憶庫校對工具。
 
 針對**OmegaT**開發。
-**使用方式**：下載 `tmx_reviewer.html`，用瀏覽器開啟即可。
-[開啟 tmx_reviewer](https://narracottt.github.io/Editor/tmx_reviewer.html)
+**使用方式**：
+- [開啟 tmx_reviewer](https://narracottt.github.io/Editor/tmx_reviewer.html)
+- 下載 `tmx_reviewer.html`，用瀏覽器開啟即可。
+
 ---
 
 ## 授權
