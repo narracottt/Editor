@@ -209,6 +209,19 @@
   .preview-pane .task input { accent-color: var(--accent); width: 16px; height: 16px; }
   .preview-pane img { max-width: 100%; border-radius: 6px; border: 1px solid var(--border); margin: 8px 0; }
 
+  /* ── Mermaid ── */
+  .preview-pane .mermaid-rendered {
+    margin: 16px 0; text-align: center;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; overflow-x: auto;
+  }
+  .preview-pane .mermaid-rendered svg { max-width: 100%; height: auto; }
+  .preview-pane .mermaid-error {
+    margin: 12px 0; padding: 10px 16px; border-radius: 8px;
+    background: rgba(220,50,50,.08); color: #c33; font-size: 13px;
+    border: 1px solid rgba(220,50,50,.2);
+  }
+
   .hidden { display: none !important; }
 
   /* Scrollbar */
@@ -312,6 +325,8 @@
 
 <!-- markdown-it CDN (primary parser) -->
 <script src="https://cdn.jsdelivr.net/npm/markdown-it/dist/markdown-it.min.js"></script>
+<!-- mermaid CDN (flowcharts, sequence diagrams, etc.) -->
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
 
 <script>
 // ── Parser setup ──
@@ -321,6 +336,20 @@ let noOl = true; // 預設開啟：停用有序列表解析（適合專利文件
 if (window.markdownit) {
   md = window.markdownit({ html: true, breaks: false, linkify: true, typographer: false });
 }
+
+// ── Mermaid setup ──
+let mermaidReady = false;
+if (window.mermaid) {
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'default',
+    securityLevel: 'loose',
+    fontFamily: "'Noto Sans TC', sans-serif",
+  });
+  mermaidReady = true;
+}
+let mermaidTimer = null;
+const mermaidCache = new Map(); // src → svg string cache
 
 // Preprocess: escape "N." at line start so markdown-it won't create <ol>
 function escapeOrderedList(src) {
@@ -428,6 +457,18 @@ function greet(name) {
 - [ ] 匯出 HTML
 - [ ] 深色模式
 
+## 流程圖（Mermaid）
+
+\`\`\`mermaid
+flowchart TD
+    S110[S110 接收使用者輸入] --> S120[S120 解析 Markdown 語法]
+    S120 --> S130{是否包含特殊區塊}
+    S130 -->|是| S140[S140 渲染 Mermaid / 表格]
+    S130 -->|否| S150[S150 輸出標準 HTML]
+    S140 --> S160[S160 合併至預覽面板]
+    S150 --> S160
+\`\`\`
+
 > 💡 快捷鍵：Ctrl+B 粗體、Ctrl+I 斜體、Ctrl+K 連結、Ctrl+F 搜尋、Ctrl+H 搜尋取代、Ctrl+O 開檔、Ctrl+S 存檔
 
 ---
@@ -435,11 +476,88 @@ function greet(name) {
 拖放 .md 檔案到視窗即可載入。享受寫作吧 🚀`;
 
 // ── Render ──
+let renderGeneration = 0; // tracks render epochs to discard stale async results
+
 function render() {
+  renderGeneration++;
   preview.innerHTML = parseMd(editor.value);
   updateStats();
   if (searchBar.classList.contains('show') && searchInput.value) highlightPreview();
   try { localStorage.setItem('md-edit-content', editor.value); } catch(e) {}
+  // Debounced mermaid render — only when preview is visible, longer delay to
+  // avoid rendering while the user is still typing invalid syntax
+  if (mermaidReady && currentView !== 'edit') {
+    clearTimeout(mermaidTimer);
+    mermaidTimer = setTimeout(renderMermaid, 1200);
+  }
+}
+
+async function renderMermaid() {
+  // Capture generation at the start; if render() fires again before we finish
+  // we'll know our results are stale and should be discarded.
+  const gen = renderGeneration;
+
+  const blocks = preview.querySelectorAll('code.language-mermaid');
+  if (!blocks.length) return;
+
+  for (let i = 0; i < blocks.length; i++) {
+    // Abort if a newer render cycle has started
+    if (renderGeneration !== gen) return;
+
+    const codeEl = blocks[i];
+    const pre = codeEl.parentElement; // <pre> wrapping the <code>
+    if (!pre || !pre.isConnected) continue; // guard: already replaced by earlier cycle
+
+    const src = codeEl.textContent.trim();
+    if (!src) continue;
+
+    // ── Cache hit: skip parse + render entirely ──
+    if (mermaidCache.has(src)) {
+      const div = document.createElement('div');
+      div.className = 'mermaid-rendered';
+      div.innerHTML = mermaidCache.get(src);
+      pre.replaceWith(div);
+      continue;
+    }
+
+    // Validate first with mermaid.parse() to avoid generating a giant error SVG
+    let parseOk = false;
+    try {
+      await mermaid.parse(src);
+      parseOk = true;
+    } catch(_) { /* invalid syntax */ }
+
+    // Guard again after the async parse
+    if (renderGeneration !== gen) return;
+    if (!pre.isConnected) continue;
+
+    if (parseOk) {
+      try {
+        const id = 'mmd-' + gen + '-' + i;
+        const { svg } = await mermaid.render(id, src);
+        if (renderGeneration !== gen) return; // discard stale result
+        if (!pre.isConnected) continue;
+        mermaidCache.set(src, svg); // ── store in cache ──
+        const div = document.createElement('div');
+        div.className = 'mermaid-rendered';
+        div.innerHTML = svg;
+        pre.replaceWith(div);
+      } catch(e) {
+        if (renderGeneration !== gen) return;
+        if (!pre.isConnected) continue;
+        const errDiv = document.createElement('div');
+        errDiv.className = 'mermaid-error';
+        errDiv.textContent = '⚠ Mermaid 語法錯誤：' + (e.message || '').toString().substring(0, 120);
+        pre.replaceWith(errDiv);
+      }
+    } else {
+      // Show a compact inline error — never let mermaid produce the huge bomb SVG
+      const errDiv = document.createElement('div');
+      errDiv.className = 'mermaid-error';
+      errDiv.textContent = '⚠ Mermaid 語法錯誤：請檢查流程圖語法';
+      pre.replaceWith(errDiv);
+    }
+  }
 }
 
 function updateStats() {
@@ -461,6 +579,11 @@ function setView(v) {
   editorPane.classList.toggle('full', v === 'edit');
   preview.classList.toggle('hidden', v === 'edit');
   editorPane.style.borderRight = v === 'split' ? '1px solid var(--border)' : 'none';
+  // When switching to a view that shows the preview, render mermaid blocks immediately
+  if (v !== 'edit' && mermaidReady) {
+    clearTimeout(mermaidTimer);
+    mermaidTimer = setTimeout(renderMermaid, 400);
+  }
 }
 
 // ── Theme ──
@@ -468,7 +591,12 @@ function toggleTheme() {
   isDark = !isDark;
   document.body.classList.toggle('dark', isDark);
   document.getElementById('themeBtn').textContent = isDark ? '☀️' : '🌙';
+  if (mermaidReady) {
+    mermaid.initialize({ startOnLoad: false, theme: isDark ? 'dark' : 'default', securityLevel: 'loose', fontFamily: "'Noto Sans TC', sans-serif" });
+    mermaidCache.clear(); // theme change invalidates all cached SVGs
+  }
   try { localStorage.setItem('md-edit-dark', isDark ? '1' : '0'); } catch(e) {}
+  render();
 }
 
 // ── No-OL toggle ──
