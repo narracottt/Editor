@@ -16,6 +16,7 @@ Markdown 即時預覽編輯器。
 - 深色模式
 
 **使用方式**：下載 `markdown-editor.html`，用瀏覽器開啟即可。
+<img width="1872" height="903" alt="markdown-editor" src="https://github.com/user-attachments/assets/c05f43f5-9550-439a-bdcd-33955d00143f" />
 
 ---
 
