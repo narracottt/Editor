@@ -161,6 +161,8 @@ function postProcess(t) {
 }
 
 function parseTMX(xmlText) {
+  // Strip DOCTYPE to prevent Safari from trying to fetch external DTD
+  xmlText = xmlText.replace(/<!DOCTYPE[^>]*>/i, "");
   const parser = new DOMParser();
   DOC = parser.parseFromString(xmlText, "text/xml");
   TUS = [];
