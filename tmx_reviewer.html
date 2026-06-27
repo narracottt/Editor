@@ -7,24 +7,19 @@
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: "Noto Sans TC", "SF Pro", system-ui, sans-serif; background: #f1f5f9; color: #1e293b; }
-
-  /* --- Landing --- */
   .landing { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center;
-    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); padding: 24px; }
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); padding: 24px; transition: background 0.2s; }
+  .landing.drag-over { background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); }
   .landing h1 { font-size: 20px; font-weight: 700; margin: 0 0 6px; }
   .landing p { font-size: 13px; color: #64748b; line-height: 1.6; margin-bottom: 20px; text-align: center; }
   .btn-primary { padding: 12px 28px; font-size: 15px; font-weight: 600; color: #fff; background: #3b82f6;
     border: none; border-radius: 10px; cursor: pointer; box-shadow: 0 2px 8px rgba(59,130,246,0.3); }
-
-  /* --- Top bar --- */
   .topbar { position: sticky; top: 0; z-index: 100; background: #1e293b; color: #fff; padding: 7px 10px;
     display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .topbar .fname { font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
   .badge { padding: 1px 6px; border-radius: 99px; font-size: 10px; display: inline-block; color: #fff; }
   .topbar .spacer { flex: 1; }
   .btn-sm { padding: 5px 10px; font-size: 11px; font-weight: 600; color: #fff; border: none; border-radius: 5px; cursor: pointer; }
-
-  /* --- Filters --- */
   .filters { position: sticky; top: 38px; z-index: 99; background: #e2e8f0; padding: 5px 10px;
     display: flex; gap: 3px; flex-wrap: wrap; align-items: center; }
   .pill { padding: 5px 9px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 5px; cursor: pointer;
@@ -32,8 +27,6 @@
   .pill.active { background: #3b82f6; color: #fff; font-weight: 700; }
   .search-input { padding: 4px 7px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 5px; width: 90px; }
   .count { font-size: 10px; color: #64748b; }
-
-  /* --- TU card --- */
   .tu-list { padding: 5px 6px; max-width: 1200px; margin: 0 auto; }
   .tu-card { background: #fff; border-radius: 8px; margin-bottom: 5px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
   .tu-card.confirmed { background: #f0f9ff; border: 1.5px solid #0ea5e9; }
@@ -54,8 +47,6 @@
   .tu-zh:focus { border-color: #3b82f6; }
   .tu-zh.edited { background: #fefce8; }
   .tu-zh.conf { background: #e0f2fe; }
-
-  /* --- Modal --- */
   .modal-bg { position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,0.5);
     display: flex; align-items: center; justify-content: center; padding: 16px; }
   .modal { background: #fff; border-radius: 12px; width: 100%; max-width: 700px; max-height: 85vh;
@@ -66,26 +57,29 @@
   .modal-body textarea { width: 100%; min-height: 300px; padding: 10px; font-size: 11px; font-family: monospace;
     border: 1px solid #e2e8f0; border-radius: 6px; resize: none; color: #334155; background: #f8fafc; line-height: 1.5; }
   .modal-foot { padding: 8px 16px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8; }
-
   .hidden { display: none !important; }
 </style>
 </head>
 <body>
 
-<!-- Landing -->
 <div id="landing" class="landing">
-  <div style="text-align:center; max-width:400px;">
+  <div style="text-align:center; max-width:480px;">
     <div style="font-size:48px; margin-bottom:12px;">📋</div>
     <h1>TMX 校稿編輯器</h1>
-    <p>中英分欄對照，按「確認」標記已核稿區段。<br>匯出後 OmegaT 可辨識 [確認] 前綴。<br>iPad Safari 可直接使用。</p>
+    <div style="text-align:left; font-size:13px; line-height:1.7; color:#475569;">
+      <b>校對</b>：中英分欄對照，譯文可直接編輯，逐段「確認」或篩選後「全部確認」<br>
+      <b>篩選</b>：未翻譯 / 未確認 / Claims / Desc / 已編輯 / AI✎ / AI⚠ / 關鍵字搜尋<br>
+      <b>自動處理</b>：偵測段落區段（Claims / Description / Abstract）、跳過編號行與 CJK 原文行、後處理修正空格（圖1、步驟S1、請求項1）<br>
+      <b>匯出</b>：檔名自動附加時間戳記（YYMMDDHHMM），可下載或複製<br>
+      <b>相容</b>：OmegaT TMX（自動剝除 DOCTYPE）、tmx_review.py 標記（【✎ / 【⚠）<br>
+      <b>環境</b>：純前端離線運作，iPad Safari 可直接使用，支援拖曳開啟檔案
+    </div>
     <button class="btn-primary" onclick="document.getElementById('fileInput').click()">選擇 TMX 檔案</button>
     <input type="file" id="fileInput" accept=".tmx" style="display:none">
   </div>
 </div>
 
-<!-- Main UI (hidden initially) -->
 <div id="mainUI" class="hidden">
-  <!-- Top bar -->
   <div class="topbar">
     <span class="fname" id="fileName">📋</span>
     <div id="statsBar" style="display:flex; gap:3px; font-size:10px;"></div>
@@ -93,19 +87,14 @@
     <button class="btn-sm" style="background:#0ea5e9;" onclick="confirmAllVisible()">全部確認</button>
     <button class="btn-sm" style="background:#22c55e;" onclick="doExport()">匯出 ↓</button>
   </div>
-
-  <!-- Filters -->
   <div class="filters" id="filterBar"></div>
-
-  <!-- TU list -->
   <div class="tu-list" id="tuList"></div>
 </div>
 
-<!-- Export modal -->
 <div id="exportModal" class="modal-bg hidden" onclick="closeModal()">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-head">
-      <span>匯出 TMX</span>
+      <span id="exportTitle">匯出 TMX</span>
       <div class="spacer"></div>
       <button class="btn-sm" style="background:#3b82f6;" onclick="downloadFile()">下載檔案 ↓</button>
       <button class="btn-sm" id="copyBtn" style="background:#475569;" onclick="copyXML()">複製全部</button>
@@ -114,17 +103,19 @@
     <div class="modal-body">
       <textarea id="exportText" readonly></textarea>
     </div>
-    <div class="modal-foot">iPad Safari：「下載檔案」會觸發下載。如無反應，請「複製全部」後貼到文字編輯器另存為 .tmx</div>
+    <div class="modal-foot" id="exportFooter"></div>
   </div>
 </div>
 
 <script>
 const CONFIRM_PREFIX = "[確認]";
 const SECTION_PATTERNS = [
-  [/^claims?(\s*\(\d+\))?$/i, "claims"],
+  [/^(patent\s+)?claims?(\s*\(\d+\))?$/i, "claims"],
   [/^what\s+is\s+claimed\s+is\s*:?$/i, "claims"],
   [/^the\s+invention\s+claimed\s+is\s*:?$/i, "claims"],
+  [/^申請專利範圍$/i, "claims"],
   [/^abstract$/i, "abstract"],
+  [/^摘要$/i, "abstract"],
   [/^detailed\s+description(\s+of(\s+the)?\s+.+)?$/i, "description"],
   [/^description$/i, "description"],
   [/^background(\s+of(\s+the)?\s+.+)?$/i, "description"],
@@ -136,7 +127,6 @@ const SECTION_PATTERNS = [
 ];
 const CLAIM_NUM_RE = /^\d+\.\s*$/;
 const CJK_RE = /[\u4e00-\u9fff\u3400-\u4dbf]/;
-
 const SC = {
   claims: { border: "#f59e0b", label: "Claims", bg: "#f59e0b" },
   description: { border: "#3b82f6", label: "Desc", bg: "#3b82f6" },
@@ -144,11 +134,18 @@ const SC = {
   unknown: { border: "#9ca3af", label: "?", bg: "#9ca3af" },
 };
 
-let TUS = [];
-let DOC = null;
-let FILE_NAME = "";
-let currentFilter = "all";
-let searchText = "";
+let TUS = [], DOC = null, FILE_NAME = "", currentFilter = "all", searchText = "";
+let exportFileName = "";  // 匯出時的完整檔名
+
+function getTimestamp() {
+  const d = new Date();
+  const yy = String(d.getFullYear()).slice(2);
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return yy + mm + dd + hh + mi;
+}
 
 function detectSection(text) {
   const t = text.trim();
@@ -170,7 +167,7 @@ function parseTMX(xmlText) {
   DOC.querySelectorAll("tu").forEach((tu, idx) => {
     let en = "", zh = "";
     tu.querySelectorAll("tuv").forEach(tuv => {
-      const lang = tuv.getAttribute("xml:lang") || tuv.getAttributeNS("http://www.w3.org/XML/1998/namespace","lang") || "";
+      const lang = tuv.getAttribute("xml:lang") || tuv.getAttributeNS("http://www.w3.org/XML/1998/namespace","lang") || tuv.getAttribute("lang") || "";
       const seg = tuv.querySelector("seg");
       const text = seg ? seg.textContent || "" : "";
       if (lang.toLowerCase().startsWith("en")) en = text;
@@ -217,31 +214,29 @@ function statusOf(tu) {
   return { c: "#ef4444", i: "○" };
 }
 
-// --- Rendering ---
 function renderStats() {
   const conf = TUS.filter(t => t.confirmed).length;
   const trans = TUS.filter(t => (t.isTranslated || t.edited) && !t.skip && !t.confirmed).length;
   const untrans = TUS.filter(t => !t.isTranslated && !t.edited && !t.skip && !t.isHeader && !t.confirmed).length;
-  const aiMod  = TUS.filter(t => t.zh.includes("【✎")).length;
-  const aiMark = TUS.filter(t => t.zh.includes("【⚠")).length;
   document.getElementById("statsBar").innerHTML =
     `<span class="badge" style="background:#0ea5e9">✔${conf}</span>` +
     `<span class="badge" style="background:#22c55e">✓${trans}</span>` +
-    `<span class="badge" style="background:#ef4444">○${untrans}</span>` +
-    (aiMod  ? `<span class="badge" style="background:#8b5cf6" title="AI已修改">✎${aiMod}</span>`  : "") +
-    (aiMark ? `<span class="badge" style="background:#f59e0b" title="AI已註記">⚠${aiMark}</span>` : "");
+    `<span class="badge" style="background:#ef4444">○${untrans}</span>`;
 }
 
 function renderFilters() {
   const bar = document.getElementById("filterBar");
   const items = [["all","全部"],["untranslated","未翻譯"],["unconfirmed","未確認"],["confirmed","已確認"],
-    ["claims","Claims"],["description","Desc"],["edited","已編輯"],
-    ["ai_modified","AI已修改✎"],["ai_marked","AI已註記⚠"]];
+    ["claims","Claims"],["description","Desc"],["edited","已編輯"],["ai_modified","AI✎"],["ai_marked","AI⚠"]];
   bar.innerHTML = items.map(([k,l]) =>
     `<button class="pill ${currentFilter===k?'active':''}" onclick="setFilter('${k}')">${l}</button>`
   ).join("") +
     `<input class="search-input" id="searchInput" placeholder="搜尋..." value="${searchText}" oninput="onSearch(this.value)">` +
     `<span class="count">${getFiltered().length} 筆</span>`;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
 
 function renderList() {
@@ -278,13 +273,8 @@ function renderList() {
   }).join("");
 }
 
-function escHtml(s) {
-  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
-}
-
 function render() { renderStats(); renderFilters(); renderList(); }
 
-// --- Actions ---
 function setFilter(f) { currentFilter = f; searchText = ""; render(); }
 function onSearch(v) { searchText = v; currentFilter = v ? "search" : "all"; renderStats(); renderList();
   document.querySelectorAll(".pill").forEach(p => p.classList.remove("active"));
@@ -332,13 +322,12 @@ function confirmAllVisible() {
   render();
 }
 
-// --- Export ---
 function buildXML() {
   const els = DOC.querySelectorAll("tu");
   TUS.forEach(tu => {
     if (!tu.edited) return;
     els[tu.index]?.querySelectorAll("tuv").forEach(tuv => {
-      const lang = tuv.getAttribute("xml:lang") || tuv.getAttributeNS("http://www.w3.org/XML/1998/namespace","lang") || "";
+      const lang = tuv.getAttribute("xml:lang") || tuv.getAttributeNS("http://www.w3.org/XML/1998/namespace","lang") || tuv.getAttribute("lang") || "";
       if (lang.toLowerCase().startsWith("zh")) {
         const seg = tuv.querySelector("seg");
         if (seg) seg.textContent = tu.zh;
@@ -352,7 +341,12 @@ function buildXML() {
 
 function doExport() {
   const xml = buildXML();
+  const ts = getTimestamp();
+  exportFileName = FILE_NAME.replace(/\.tmx$/i, "_" + ts + ".tmx");
   document.getElementById("exportText").value = xml;
+  document.getElementById("exportTitle").textContent = "匯出：" + exportFileName;
+  document.getElementById("exportFooter").textContent =
+    "檔名：" + exportFileName + "　｜　如「下載檔案」無反應，請「複製全部」後貼到文字編輯器另存為 .tmx";
   document.getElementById("exportModal").classList.remove("hidden");
 }
 
@@ -360,20 +354,18 @@ function closeModal() { document.getElementById("exportModal").classList.add("hi
 
 function downloadFile() {
   const xml = document.getElementById("exportText").value;
-  const name = FILE_NAME.replace(/\.tmx$/i, "_reviewed.tmx");
   try {
     const blob = new Blob([xml], { type: "application/xml;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = name;
+    a.href = url; a.download = exportFileName;
     document.body.appendChild(a); a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   } catch(e) {
-    // fallback: data URI
     const a = document.createElement("a");
     a.href = "data:application/xml;charset=utf-8," + encodeURIComponent(xml);
-    a.download = name;
+    a.download = exportFileName;
     document.body.appendChild(a); a.click();
     document.body.removeChild(a);
   }
@@ -394,10 +386,13 @@ function copyXML() {
   }
 }
 
-// --- File load ---
 document.getElementById("fileInput").addEventListener("change", function(e) {
   const file = e.target.files[0];
   if (!file) return;
+  loadTMXFile(file);
+});
+
+function loadTMXFile(file) {
   FILE_NAME = file.name;
   const reader = new FileReader();
   reader.onload = function(ev) {
@@ -408,6 +403,19 @@ document.getElementById("fileInput").addEventListener("change", function(e) {
     render();
   };
   reader.readAsText(file, "UTF-8");
+}
+
+// --- Drag & drop ---
+const landing = document.getElementById("landing");
+["dragenter","dragover"].forEach(evt => {
+  document.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); landing.classList.add("drag-over"); });
+});
+["dragleave","drop"].forEach(evt => {
+  document.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); landing.classList.remove("drag-over"); });
+});
+document.addEventListener("drop", e => {
+  const file = e.dataTransfer.files[0];
+  if (file && /\.tmx$/i.test(file.name)) loadTMXFile(file);
 });
 </script>
 </body>
