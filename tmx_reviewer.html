@@ -71,8 +71,8 @@
       <b>篩選</b>：未翻譯 / 未確認 / Claims / Desc / 已編輯 / AI✎ / AI⚠ / 關鍵字搜尋<br>
       <b>自動處理</b>：偵測段落區段（Claims / Description / Abstract）、跳過編號行與 CJK 原文行、後處理修正空格（圖1、步驟S1、請求項1）<br>
       <b>匯出</b>：檔名自動附加時間戳記（YYMMDDHHMM），可下載或複製<br>
-      <b>相容</b>：OmegaT TMX（自動剝除 DOCTYPE）、tmx_review.py 標記（【✎ / 【⚠）<br>
-      <b>移除</b>：tmx_review.py 標記（【✎ / 【⚠）。只有該筆譯文含有對應 tag 時才會出現，不會佔用畫面空間。<br>
+      <b>相容</b>：OmegaT TMX（自動剝除 DOCTYPE）、tmx_review.py 標記（【✎ / 【⚠）、批次翻譯回音標記（⚠(BATCH_ECHO)）<br>
+      <b>移除</b>：tmx_review.py 標記（【✎ / 【⚠）、⚠(BATCH_ECHO) 回音標記。只有該筆譯文含有對應 tag 時才會出現，不會佔用畫面空間。<br>
       <b>環境</b>：純前端離線運作，iPad Safari 可直接使用，支援拖曳開啟檔案
     </div>
     <button class="btn-primary" onclick="document.getElementById('fileInput').click()">選擇 TMX 檔案</button>
@@ -198,7 +198,7 @@ function getFiltered() {
     if (currentFilter === "unconfirmed") return (tu.isTranslated || tu.edited) && !tu.confirmed && !tu.skip;
     if (currentFilter === "headers") return tu.isHeader;
     if (currentFilter === "ai_modified") return tu.zh.includes("【✎");
-    if (currentFilter === "ai_marked")   return tu.zh.includes("【⚠");
+    if (currentFilter === "ai_marked")   return tu.zh.includes("【⚠") || tu.zh.includes("⚠(BATCH_ECHO)");
     if (searchText) {
       const q = searchText.toLowerCase();
       return tu.en.toLowerCase().includes(q) || tu.zh.toLowerCase().includes(q);
@@ -261,6 +261,7 @@ function renderList() {
         <div class="spacer"></div>
         ${tu.zh.includes("【✎") ? `<button class="btn-sm" style="background:#f59e0b; padding:2px 8px; font-size:10px;" onclick="removeAiTag(${tu.index}, '✎')">移除AI✎</button>` : ''}
         ${tu.zh.includes("【⚠") ? `<button class="btn-sm" style="background:#ef4444; padding:2px 8px; font-size:10px;" onclick="removeAiTag(${tu.index}, '⚠')">移除AI⚠</button>` : ''}
+        ${tu.zh.includes("⚠(BATCH_ECHO)") ? `<button class="btn-sm" style="background:#dc2626; padding:2px 8px; font-size:10px;" onclick="removeBatchEcho(${tu.index})">移除⚠(BATCH_ECHO)</button>` : ''}
         ${!tu.skip ? `<button class="btn-confirm ${tu.confirmed?'on':''}" onclick="toggleConfirm(${tu.index})">${tu.confirmed ? '✔ 已確認' : '確認'}</button>` : ''}
       </div>
       <div class="tu-body">
@@ -321,6 +322,17 @@ function removeAiTag(idx, type) {
   let body = hasP ? tu.zh.slice(CONFIRM_PREFIX.length) : tu.zh;
   const re = type === "✎" ? /【✎[^】]*】/g : /【⚠[^】]*】/g;
   body = body.replace(re, "").replace(/[ \t]{2,}/g, " ").trim();
+  tu.zh = hasP ? CONFIRM_PREFIX + body : body;
+  tu.edited = true;
+  tu.isTranslated = tu.zh.trim() !== "" && tu.en.trim() !== tu.zh.trim();
+  render();
+}
+
+function removeBatchEcho(idx) {
+  const tu = TUS[idx];
+  const hasP = tu.zh.startsWith(CONFIRM_PREFIX);
+  let body = hasP ? tu.zh.slice(CONFIRM_PREFIX.length) : tu.zh;
+  body = body.replace(/⚠\(BATCH_ECHO\)\s*/g, "").replace(/[ \t]{2,}/g, " ").trim();
   tu.zh = hasP ? CONFIRM_PREFIX + body : body;
   tu.edited = true;
   tu.isTranslated = tu.zh.trim() !== "" && tu.en.trim() !== tu.zh.trim();
