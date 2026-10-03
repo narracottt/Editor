@@ -10,6 +10,9 @@ Markdown 即時預覽編輯器。
 
 **功能**
 - 即時分割預覽 / 純編輯 / 純預覽三種模式
+- 手機預設全寬預覽，編輯與預覽可一鍵切換；格式工具列可左右滑動
+- 可修改匯出檔名，開啟檔案時保留月份檔名
+- 顯示瀏覽器草稿與待匯出狀態，重新開啟可還原內容及檔名
 - 支援 Mermaid 流程圖（含 render cache 與語法驗證）
 - 全文搜尋與取代
 - 匯出 .md / .html
@@ -18,6 +21,10 @@ Markdown 即時預覽編輯器。
 **使用方式**：
 - [開啟 markdown-editor](https://narracottt.github.io/Editor/markdown-editor.html)
 - 下載 `markdown-editor.html`，用瀏覽器開啟即可。
+
+**手機使用**：用上述網址開啟編輯器，可透過瀏覽器選單加入主畫面。點「開啟」選取 Markdown 檔，點「編輯」修改，再按「匯出 .md」下載副本。
+
+**儲存方式**：草稿只保存在目前瀏覽器，每次載入其他文件會取代草稿；不會同步到其他裝置。開新文件或載入檔案前，若目前內容尚未匯出，會先提醒。匯出不會直接覆寫原始檔案，需自行替換。首次使用會沿用舊版瀏覽器草稿。Mermaid 與完整 Markdown 解析仍透過既有 CDN 載入。
 
 <img width="1872" height="903" alt="markdown-editor" src="https://github.com/user-attachments/assets/c05f43f5-9550-439a-bdcd-33955d00143f" />
 

@@ -2,7 +2,8 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="theme-color" content="#5b5fc7">
 <title>MD Edit — Markdown 編輯器</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -29,6 +30,12 @@
     background: var(--bg); color: var(--text);
     display: flex; flex-direction: column;
     transition: background .25s, color .25s;
+    height: 100dvh;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  button, summary { touch-action: manipulation; }
+  button:focus-visible, summary:focus-visible, input:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
   }
 
   /* ── Header ── */
@@ -83,9 +90,36 @@
   .export-btn {
     padding: 4px 10px; border: none; border-radius: 5px; cursor: pointer;
     font-size: 12px; background: transparent; color: var(--muted);
-    font-family: inherit; transition: color .15s;
+    font-family: inherit; transition: color .15s; white-space: nowrap;
   }
   .export-btn:hover { color: var(--accent); }
+
+  /* File controls stay available in both edit and preview views. */
+  .document-bar {
+    display: flex; align-items: center; gap: 12px; padding: 8px 16px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+  }
+  .document-info { flex: 1; min-width: 0; }
+  .filename {
+    display: block; width: 100%; max-width: 360px; padding: 3px 0;
+    background: transparent; color: var(--text); border: none; border-radius: 4px;
+    font-size: 14px; font-weight: 500; font-family: inherit; text-overflow: ellipsis;
+  }
+  .draft-status { color: var(--muted); font-size: 11px; line-height: 1.5; }
+  .file-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+  .file-actions .export-primary { background: var(--accent); color: #fff; }
+  .file-actions .export-primary:hover { filter: brightness(1.1); }
+  .more-menu { position: relative; }
+  .more-menu summary { list-style: none; cursor: pointer; white-space: nowrap; }
+  .more-menu summary::-webkit-details-marker { display: none; }
+  .more-actions {
+    position: absolute; right: 0; top: calc(100% + 6px); z-index: 30;
+    min-width: 180px; padding: 6px; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--surface); box-shadow: 0 6px 24px rgba(0,0,0,.12);
+  }
+  .more-actions button { display: block; text-align: left; width: 100%; }
+  .more-actions p { padding: 8px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+  body[data-view="preview"] .toolbar { display: none; }
 
   /* ── Search/Replace bar ── */
   .search-bar {
@@ -139,16 +173,16 @@
   }
 
   /* ── Main area ── */
-  .main { flex: 1; display: flex; overflow: hidden; }
+  .main { flex: 1; min-height: 0; display: flex; overflow: hidden; }
 
   /* ── Editor ── */
   .editor-pane {
-    flex: 1; display: flex; flex-direction: column;
+    flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;
     border-right: 1px solid var(--border);
   }
   .editor-pane.full { border-right: none; }
   #editor {
-    flex: 1; resize: none; border: none; outline: none;
+    flex: 1; min-height: 0; width: 100%; resize: none; border: none; outline: none;
     padding: 20px 24px; font-size: 14px; line-height: 1.75; tab-size: 2;
     font-family: 'JetBrains Mono', 'Noto Sans TC', monospace;
     background: var(--editor-bg); color: var(--text);
@@ -158,9 +192,14 @@
 
   /* ── Preview ── */
   .preview-pane {
-    flex: 1; overflow: auto; padding: 20px 32px;
+    flex: 1; min-width: 0; overflow: auto; padding: 20px 32px;
     background: var(--preview-bg); font-size: 15px; line-height: 1.8;
+    overflow-wrap: anywhere;
   }
+  body[data-view="preview"] .preview-pane { padding: 24px max(32px, calc((100% - 800px) / 2)); }
+  .preview-pane > :first-child { margin-top: 0; }
+  .preview-pane .table-scroll { overflow-x: auto; margin: 12px 0; }
+  .preview-pane .table-scroll table { margin: 0; }
   .preview-pane h1 {
     font-size: 1.85em; font-weight: 700; margin: 24px 0 12px;
     padding-bottom: 8px; border-bottom: 2px solid rgba(91,95,199,.25);
@@ -245,9 +284,39 @@
     box-shadow: 0 8px 32px rgba(0,0,0,.12);
   }
 
-  @media (max-width: 640px) {
-    .preview-pane { padding: 16px !important; }
+  @media (max-width: 700px) {
+    .header { padding: 6px 12px; gap: 8px; flex-shrink: 0; }
+    .logo-mark { font-size: 16px; white-space: nowrap; }
+    .logo-mark span { display: none; }
     .stats { display: none; }
+    .header-right { gap: 2px; }
+    .header-right .divider, [data-view="split"] { display: none; }
+    .btn { min-height: 44px; padding: 8px 10px; font-size: 14px; }
+    #themeBtn { min-width: 44px; }
+    .document-bar { padding: 8px 12px; flex-wrap: wrap; gap: 6px; flex-shrink: 0; }
+    .document-info { flex-basis: 100%; }
+    .filename { max-width: none; font-size: 16px; }
+    .draft-status { font-size: 12px; }
+    .file-actions { width: 100%; gap: 4px; }
+    .file-actions > .export-btn { flex: 1; }
+    .export-btn, .more-menu summary { min-height: 44px; padding: 10px 8px; font-size: 13px; }
+    .more-menu summary { display: flex; align-items: center; }
+    .more-actions { min-width: 210px; }
+    .toolbar { flex-wrap: nowrap; overflow-x: auto; padding: 2px 8px; flex-shrink: 0; }
+    .tool-btn { flex-shrink: 0; min-width: 44px; min-height: 44px; padding: 8px; }
+    .toolbar .divider { flex-shrink: 0; }
+    .preview-pane { padding: 18px 16px !important; font-size: 17px; line-height: 1.85; }
+    .preview-pane h1 { font-size: 1.55em; }
+    .preview-pane h2 { font-size: 1.3em; }
+    .preview-pane pre { padding: 12px; font-size: 13px; }
+    .preview-pane th, .preview-pane td { min-width: 100px; padding: 8px 10px; }
+    #editor { padding: 16px; font-size: 16px; line-height: 1.8; }
+    .search-bar { padding: 6px 12px; flex-shrink: 0; max-height: 40dvh; overflow-y: auto; }
+    .search-bar .s-row { flex-wrap: wrap; gap: 4px; }
+    .search-bar input[type="text"] { flex: 1 1 100%; min-width: 0; width: 100%; font-size: 16px; min-height: 44px; }
+    .search-bar .s-btn, .search-bar .s-toggle, .search-bar .s-close { min-width: 44px; min-height: 44px; font-size: 13px; }
+    .search-bar .s-info { flex: 1; min-width: 42px; }
+    .drop-overlay div { padding: 20px; font-size: 16px; }
   }
 </style>
 </head>
@@ -263,15 +332,38 @@
     <div class="stats" id="stats">0 字元 · 0 詞 · 0 行</div>
   </div>
   <div class="header-right">
-    <button class="btn" data-view="edit" onclick="setView('edit')">✎ 編輯</button>
-    <button class="btn active" data-view="split" onclick="setView('split')">◫ 分割</button>
-    <button class="btn" data-view="preview" onclick="setView('preview')">◉ 預覽</button>
+    <button class="btn" data-view="edit" onclick="setView('edit')" aria-pressed="false">✎ 編輯</button>
+    <button class="btn active" data-view="split" onclick="setView('split')" aria-pressed="true">◫ 分割</button>
+    <button class="btn" data-view="preview" onclick="setView('preview')" aria-pressed="false">◉ 預覽</button>
     <div class="divider"></div>
-    <button class="btn" id="themeBtn" onclick="toggleTheme()" title="切換深色/淺色">🌙</button>
+    <button class="btn" id="themeBtn" onclick="toggleTheme()" title="切換深色/淺色" aria-label="切換深色或淺色模式">🌙</button>
   </div>
 </div>
 
-<!-- Toolbar -->
+<!-- Document and file controls -->
+<div class="document-bar">
+  <div class="document-info">
+    <input class="filename" id="filenameInput" value="document.md" aria-label="匯出檔名" title="可修改匯出檔名" autocomplete="off" spellcheck="false">
+    <div class="draft-status" id="draftStatus" role="status" aria-live="polite"></div>
+  </div>
+  <div class="file-actions">
+    <button class="export-btn" onclick="openFile()">📂 開啟</button>
+    <button class="export-btn export-primary" onclick="downloadMd()">⬇ 匯出 .md</button>
+    <button class="export-btn" onclick="toggleSearch(false)" aria-label="搜尋內容">⌕ 搜尋</button>
+    <details class="more-menu" id="moreMenu">
+      <summary class="export-btn">更多 ▾</summary>
+      <div class="more-actions">
+        <button class="export-btn" onclick="newFile()">📄 新增文件</button>
+        <button class="export-btn" onclick="toggleSearch(true); closeMore()">搜尋與取代</button>
+        <button class="export-btn" onclick="downloadHtml(); closeMore()">匯出 .html</button>
+        <button class="export-btn" onclick="copyHtml(); closeMore()">複製 HTML</button>
+        <p>草稿只保存在此瀏覽器。匯出會下載副本，原始檔案需自行替換。</p>
+      </div>
+    </details>
+  </div>
+</div>
+
+<!-- Formatting toolbar -->
 <div class="toolbar" id="toolbar">
   <button class="tool-btn" onclick="ins('# ','')">H₁</button>
   <button class="tool-btn" onclick="ins('## ','')">H₂</button>
@@ -286,30 +378,22 @@
   <button class="tool-btn" onclick="ins('\n---\n','')">—</button>
   <div class="divider"></div>
   <button class="tool-btn" id="noOlBtn" onclick="toggleNoOl()" title="停用數字列表解析（專利模式）">1.⃠</button>
-  <button class="tool-btn" onclick="toggleSearch(true)" title="搜尋取代 (Ctrl+H)">⌕</button>
   <input type="file" id="fileInput" accept=".md,.markdown,.txt" hidden>
-  <div class="tool-spacer"></div>
-  <button class="export-btn" onclick="newFile()">📄 新增</button>
-  <button class="export-btn" onclick="openFile()">📂 開啟</button>
-  <div class="divider"></div>
-  <button class="export-btn" onclick="downloadMd()">⬇ .md</button>
-  <button class="export-btn" onclick="downloadHtml()">⬇ .html</button>
-  <button class="export-btn" onclick="copyHtml()">📋 HTML</button>
 </div>
 
 <!-- Search/Replace bar -->
 <div class="search-bar" id="searchBar">
   <div class="s-row">
-    <input type="text" id="searchInput" placeholder="搜尋…" autocomplete="off" spellcheck="false">
+    <input type="text" id="searchInput" placeholder="搜尋…" aria-label="搜尋文字" autocomplete="off" spellcheck="false">
     <button class="s-toggle" id="sCaseBtn" onclick="toggleCase()" onmousedown="event.preventDefault()" title="區分大小寫">Aa</button>
     <button class="s-toggle" id="sRegexBtn" onclick="toggleRegex()" onmousedown="event.preventDefault()" title="正規表示式">.*</button>
     <span class="s-info" id="searchInfo"></span>
-    <button class="s-btn" onclick="searchPrev()" onmousedown="event.preventDefault()">▲</button>
-    <button class="s-btn" onclick="searchNext()" onmousedown="event.preventDefault()">▼</button>
-    <button class="s-close" onclick="closeSearch()">✕</button>
+    <button class="s-btn" onclick="searchPrev()" onmousedown="event.preventDefault()" aria-label="上一筆搜尋結果">▲</button>
+    <button class="s-btn" onclick="searchNext()" onmousedown="event.preventDefault()" aria-label="下一筆搜尋結果">▼</button>
+    <button class="s-close" onclick="closeSearch()" aria-label="關閉搜尋">✕</button>
   </div>
   <div class="s-row" id="replaceRow">
-    <input type="text" id="replaceInput" placeholder="取代…" autocomplete="off" spellcheck="false">
+    <input type="text" id="replaceInput" placeholder="取代…" aria-label="取代文字" autocomplete="off" spellcheck="false">
     <button class="s-btn" onclick="replaceCurrent()" onmousedown="event.preventDefault()">取代</button>
     <button class="s-btn" onclick="replaceAll()" onmousedown="event.preventDefault()">全部取代</button>
   </div>
@@ -318,7 +402,7 @@
 <!-- Main -->
 <div class="main" id="main">
   <div class="editor-pane" id="editorPane">
-    <textarea id="editor" placeholder="在這裡輸入 Markdown..." spellcheck="false"></textarea>
+    <textarea id="editor" aria-label="Markdown 內容" placeholder="在這裡輸入 Markdown..." spellcheck="false"></textarea>
   </div>
   <div class="preview-pane" id="preview"></div>
 </div>
@@ -418,13 +502,60 @@ const editor = document.getElementById('editor');
 const preview = document.getElementById('preview');
 const editorPane = document.getElementById('editorPane');
 const statsEl = document.getElementById('stats');
-let currentView = 'split';
+const filenameInput = document.getElementById('filenameInput');
+const draftStatus = document.getElementById('draftStatus');
+const mobileLayout = window.matchMedia('(max-width: 700px)');
+let currentView = mobileLayout.matches ? 'preview' : 'split';
 let isDark = false;
+let currentFilename = 'document.md';
+let exportedContent = null;
+let exportedFilename = null;
+let hasUserContent = false;
+let draftSaved = false;
+let fileLoadGeneration = 0;
+
+function normalizeFilename(name) {
+  const clean = name.trim().replace(/[\\/:*?"<>|\u0000-\u001f]/g, '-');
+  const stem = clean.replace(/\.(md|markdown|txt|html)$/i, '');
+  return (stem || 'document') + '.md';
+}
+
+function needsExport() {
+  return editor.value !== exportedContent || currentFilename !== exportedFilename;
+}
+
+function persistDraft() {
+  try {
+    localStorage.setItem('md-edit-draft', JSON.stringify({
+      content: editor.value, filename: currentFilename, needsExport: needsExport(), hasUserContent
+    }));
+    draftSaved = true;
+  } catch(e) { draftSaved = false; }
+  draftStatus.textContent = draftSaved
+    ? '草稿已存於此瀏覽器' + (needsExport() ? ' · 待匯出 .md' : '')
+    : '無法保存瀏覽器草稿 · 請匯出 .md';
+}
+
+function commitFilename() {
+  currentFilename = normalizeFilename(filenameInput.value);
+  filenameInput.value = currentFilename;
+  persistDraft();
+}
+
+filenameInput.addEventListener('change', commitFilename);
+filenameInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); commitFilename(); filenameInput.blur(); }
+});
+
+function closeMore() { document.getElementById('moreMenu').open = false; }
+document.addEventListener('click', e => {
+  if (!e.target.closest('#moreMenu')) closeMore();
+});
 
 // ── Sample content ──
 editor.value = `# Markdown Editor ✨
 
-歡迎使用 MD Edit！左邊編輯，右邊即時預覽。
+歡迎使用 MD Edit！手機可切換全寬預覽與編輯，電腦可使用左右分割。
 
 ## 功能
 
@@ -469,7 +600,7 @@ flowchart TD
     S150 --> S160
 \`\`\`
 
-> 💡 快捷鍵：Ctrl+B 粗體、Ctrl+I 斜體、Ctrl+K 連結、Ctrl+F 搜尋、Ctrl+H 搜尋取代、Ctrl+O 開檔、Ctrl+S 存檔
+> 💡 快捷鍵：Ctrl+B 粗體、Ctrl+I 斜體、Ctrl+K 連結、Ctrl+F 搜尋、Ctrl+H 搜尋取代、Ctrl+O 開檔、Ctrl+S 匯出副本
 
 ---
 
@@ -481,9 +612,15 @@ let renderGeneration = 0; // tracks render epochs to discard stale async results
 function render() {
   renderGeneration++;
   preview.innerHTML = parseMd(editor.value);
+  preview.querySelectorAll('table').forEach(table => {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'table-scroll';
+    table.replaceWith(wrapper);
+    wrapper.appendChild(table);
+  });
   updateStats();
   if (searchBar.classList.contains('show') && searchInput.value) highlightPreview();
-  try { localStorage.setItem('md-edit-content', editor.value); } catch(e) {}
+  persistDraft();
   // Debounced mermaid render — only when preview is visible, longer delay to
   // avoid rendering while the user is still typing invalid syntax
   if (mermaidReady && currentView !== 'edit') {
@@ -571,20 +708,28 @@ function updateStats() {
 
 // ── View switching ──
 function setView(v) {
+  if (mobileLayout.matches && v === 'split') v = 'preview';
   currentView = v;
+  document.body.dataset.view = v;
   document.querySelectorAll('[data-view]').forEach(b => {
     b.classList.toggle('active', b.dataset.view === v);
+    b.setAttribute('aria-pressed', String(b.dataset.view === v));
   });
   editorPane.classList.toggle('hidden', v === 'preview');
   editorPane.classList.toggle('full', v === 'edit');
   preview.classList.toggle('hidden', v === 'edit');
   editorPane.style.borderRight = v === 'split' ? '1px solid var(--border)' : 'none';
+  if (v === 'preview') editor.blur();
+  if (searchBar.classList.contains('show')) doSearch();
   // When switching to a view that shows the preview, render mermaid blocks immediately
   if (v !== 'edit' && mermaidReady) {
     clearTimeout(mermaidTimer);
     mermaidTimer = setTimeout(renderMermaid, 400);
   }
 }
+mobileLayout.addEventListener('change', () => {
+  if (mobileLayout.matches && currentView === 'split') setView('preview');
+});
 
 // ── Theme ──
 function toggleTheme() {
@@ -613,9 +758,10 @@ const searchBar = document.getElementById('searchBar');
 const searchInput = document.getElementById('searchInput');
 const replaceInput = document.getElementById('replaceInput');
 const searchInfo = document.getElementById('searchInfo');
-let sCase = false, sRegex = false, sMatches = [], sIdx = -1;
+let sCase = false, sRegex = false, sMatches = [], sIdx = -1, previewMatchIdx = 0;
 
 function toggleSearch(withReplace) {
+  if (withReplace && currentView === 'preview') setView('edit');
   const visible = searchBar.classList.contains('show');
   const replaceRow = document.getElementById('replaceRow');
   if (!visible) {
@@ -640,7 +786,7 @@ function closeSearch() {
   sMatches = []; sIdx = -1;
   searchInfo.textContent = '';
   clearPreviewHighlights();
-  editor.focus();
+  if (currentView !== 'preview') editor.focus();
 }
 
 function toggleCase() { sCase = !sCase; document.getElementById('sCaseBtn').classList.toggle('on', sCase); doSearch(); }
@@ -649,6 +795,7 @@ function toggleRegex() { sRegex = !sRegex; document.getElementById('sRegexBtn').
 function doSearch() {
   const q = searchInput.value;
   sMatches = []; sIdx = -1;
+  previewMatchIdx = 0;
   if (!q) { searchInfo.textContent = ''; clearPreviewHighlights(); return; }
 
   try {
@@ -693,6 +840,10 @@ function highlightMatch(focusEditor = true) {
 
   // Only steal focus & select when navigating (▲▼ / Enter), not while typing in search
   if (focusEditor) {
+    if (currentView === 'preview') {
+      highlightPreviewMatch(true);
+      return;
+    }
     editor.focus({ preventScroll: true });
     requestAnimationFrame(() => {
       editor.setSelectionRange(m.start, m.end);
@@ -746,15 +897,29 @@ function highlightPreview() {
     if (last < text.length) frag.appendChild(document.createTextNode(text.substring(last)));
     node.replaceWith(frag);
   });
+  if (currentView === 'preview') highlightPreviewMatch(false);
+}
+
+function highlightPreviewMatch(scroll) {
+  const matches = preview.querySelectorAll('mark.search-hl');
+  if (!matches.length) { searchInfo.textContent = '預覽 0 筆'; return; }
+  previewMatchIdx = (previewMatchIdx + matches.length) % matches.length;
+  matches.forEach(mark => mark.classList.remove('search-hl-active'));
+  const active = matches[previewMatchIdx];
+  active.classList.add('search-hl-active');
+  searchInfo.textContent = `${previewMatchIdx + 1} / ${matches.length}`;
+  if (scroll) active.scrollIntoView({ block: 'center' });
 }
 
 function searchNext() {
+  if (currentView === 'preview') { previewMatchIdx++; highlightPreviewMatch(true); return; }
   if (sMatches.length === 0) { doSearch(); return; }
   sIdx = (sIdx + 1) % sMatches.length;
   highlightMatch();
 }
 
 function searchPrev() {
+  if (currentView === 'preview') { previewMatchIdx--; highlightPreviewMatch(true); return; }
   if (sMatches.length === 0) { doSearch(); return; }
   sIdx = (sIdx - 1 + sMatches.length) % sMatches.length;
   highlightMatch();
@@ -767,6 +932,7 @@ function replaceCurrent() {
   editor.value = editor.value.substring(0, m.start) + r + editor.value.substring(m.end);
   // Adjust cursor
   editor.selectionStart = editor.selectionEnd = m.start + r.length;
+  hasUserContent = true;
   render();
   doSearch();
   if (sMatches.length > 0) {
@@ -785,6 +951,7 @@ function replaceAll() {
     const re = sRegex ? new RegExp(q, flags) : new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags);
     const count = (editor.value.match(re) || []).length;
     editor.value = editor.value.replace(re, r);
+    if (count) hasUserContent = true;
     render();
     doSearch();
     showToast(`已取代 ${count} 筆`);
@@ -809,12 +976,14 @@ replaceInput.addEventListener('keydown', e => {
 
 // ── Insert markdown ──
 function ins(prefix, suffix) {
+  if (currentView === 'preview') setView('edit');
   const s = editor.selectionStart, e = editor.selectionEnd;
   const sel = editor.value.substring(s, e) || '文字';
   editor.value = editor.value.substring(0, s) + prefix + sel + suffix + editor.value.substring(e);
   editor.focus();
   editor.selectionStart = s + prefix.length;
   editor.selectionEnd = s + prefix.length + sel.length;
+  hasUserContent = true;
   render();
 }
 
@@ -832,6 +1001,7 @@ editor.addEventListener('keydown', e => {
     const s = editor.selectionStart;
     editor.value = editor.value.substring(0,s) + '  ' + editor.value.substring(editor.selectionEnd);
     editor.selectionStart = editor.selectionEnd = s + 2;
+    hasUserContent = true;
     render();
   }
   if (e.key === 'F3' && !e.ctrlKey) { e.preventDefault(); e.shiftKey ? searchPrev() : searchNext(); }
@@ -849,6 +1019,11 @@ document.addEventListener('keydown', e => {
   }
   if (e.key === 'Escape' && searchBar.classList.contains('show')) {
     closeSearch();
+  }
+  if (e.key === 'Escape') closeMore();
+  if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'o') && e.target !== editor) {
+    e.preventDefault();
+    e.key === 's' ? downloadMd() : openFile();
   }
   // F3 works globally (search box, replace box, editor, anywhere)
   if (e.key === 'F3' && !e.ctrlKey && !e.metaKey) {
@@ -868,8 +1043,16 @@ editor.addEventListener('scroll', () => {
 
 // ── New file ──
 function newFile() {
-  if (editor.value.trim() && !confirm('目前內容尚未儲存，確定要開新文件嗎？')) return;
+  if (!canReplaceDocument()) return;
+  fileLoadGeneration++;
   editor.value = '';
+  currentFilename = 'document.md';
+  filenameInput.value = currentFilename;
+  exportedContent = null;
+  exportedFilename = null;
+  hasUserContent = false;
+  closeMore();
+  setView('edit');
   render();
   editor.focus();
   showToast('已開新文件');
@@ -880,18 +1063,37 @@ function openFile() {
   document.getElementById('fileInput').click();
 }
 
-const fileInput = document.getElementById('fileInput');
-fileInput.addEventListener('change', e => {
-  const file = e.target.files[0];
-  if (!file) return;
+function canReplaceDocument() {
+  return !hasUserContent || !needsExport()
+    || confirm('目前內容尚未匯出，載入其他文件會取代此瀏覽器草稿。確定繼續？');
+}
+
+function loadFile(file) {
+  if (!canReplaceDocument()) return;
+  const generation = ++fileLoadGeneration;
   const reader = new FileReader();
   reader.onload = ev => {
+    if (generation !== fileLoadGeneration) return;
     editor.value = ev.target.result;
+    currentFilename = normalizeFilename(file.name);
+    filenameInput.value = currentFilename;
+    exportedContent = editor.value;
+    exportedFilename = currentFilename;
+    hasUserContent = true;
+    editor.scrollTop = preview.scrollTop = 0;
     render();
+    if (mobileLayout.matches) setView('preview');
     showToast(`已開啟 ${file.name}`);
   };
   reader.onerror = () => showToast('檔案讀取失敗');
   reader.readAsText(file, 'utf-8');
+}
+
+const fileInput = document.getElementById('fileInput');
+fileInput.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  loadFile(file);
   fileInput.value = '';
 });
 
@@ -900,9 +1102,15 @@ fileInput.addEventListener('change', e => {
 function cleanExport(html) { return html.replace(/&#46;/g, '.'); }
 
 function downloadMd() {
-  dl(editor.value, 'document.md', 'text/markdown');
+  commitFilename();
+  dl(editor.value, currentFilename, 'text/markdown;charset=utf-8');
+  exportedContent = editor.value;
+  exportedFilename = currentFilename;
+  persistDraft();
+  showToast('已準備下載副本；原始檔案需自行替換');
 }
 function downloadHtml() {
+  commitFilename();
   const body = cleanExport(parseMd(editor.value));
   const full = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Markdown Export</title>
 <style>body{font-family:-apple-system,'Noto Sans TC',sans-serif;max-width:800px;margin:40px auto;padding:0 20px;line-height:1.8;color:#1a1a2e}
@@ -912,18 +1120,21 @@ code{background:#f4f4f8;padding:2px 6px;border-radius:4px;font-size:.9em}
 table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px 12px;text-align:left}th{background:#f8f8fc}
 blockquote{border-left:4px solid #5b5fc7;margin:0;padding:8px 16px;background:#f8f8fc}
 a{color:#5b5fc7}</style></head><body>${body}</body></html>`;
-  dl(full, 'document.html', 'text/html');
+  dl(full, currentFilename.replace(/\.md$/i, '.html'), 'text/html;charset=utf-8');
+  showToast('已準備下載 HTML 副本');
 }
 function copyHtml() {
-  navigator.clipboard.writeText(cleanExport(parseMd(editor.value))).then(() => showToast('HTML 已複製！'));
+  if (!navigator.clipboard) { showToast('此瀏覽器無法複製，請匯出 HTML'); return; }
+  navigator.clipboard.writeText(cleanExport(parseMd(editor.value)))
+    .then(() => showToast('HTML 已複製！'))
+    .catch(() => showToast('複製失敗，請匯出 HTML'));
 }
 function dl(content, name, type) {
   const blob = new Blob([content], {type});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = name; a.click();
-  URL.revokeObjectURL(url);
-  showToast(`已下載 ${name}`);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 function showToast(msg) {
   const d = document.createElement('div');
@@ -931,6 +1142,7 @@ function showToast(msg) {
   Object.assign(d.style, {
     position:'fixed',bottom:'20px',left:'50%',transform:'translateX(-50%)',
     padding:'8px 20px',borderRadius:'8px',fontSize:'13px',fontWeight:'500',
+    maxWidth:'calc(100vw - 32px)',width:'max-content',textAlign:'center',
     background:'var(--accent)',color:'#fff',zIndex:'999',
     animation:'fadeInUp .3s ease',boxShadow:'0 4px 16px rgba(0,0,0,.15)'
   });
@@ -963,23 +1175,36 @@ document.addEventListener('drop', e => {
   if (!file) return;
   const ok = file.name.endsWith('.md') || file.name.endsWith('.markdown') || file.name.endsWith('.txt');
   if (!ok) { showToast('僅支援 Markdown / TXT'); return; }
-  const reader = new FileReader();
-  reader.onload = ev => { editor.value = ev.target.result; render(); showToast(`已載入 ${file.name}`); };
-  reader.onerror = () => showToast('檔案讀取失敗');
-  reader.readAsText(file, 'utf-8');
+  loadFile(file);
 });
 
 // ── Init ──
 (function init() {
   try {
-    const saved = localStorage.getItem('md-edit-content');
-    if (saved) editor.value = saved;
-    if (localStorage.getItem('md-edit-dark') === '1') toggleTheme();
+    const storedDraft = localStorage.getItem('md-edit-draft');
+    const saved = storedDraft ? JSON.parse(storedDraft) : null;
+    if (saved && typeof saved.content === 'string') {
+      editor.value = saved.content;
+      currentFilename = normalizeFilename(typeof saved.filename === 'string' ? saved.filename : 'document.md');
+      hasUserContent = saved.hasUserContent !== false;
+      if (saved.needsExport === false) {
+        exportedContent = editor.value;
+        exportedFilename = currentFilename;
+      }
+    } else {
+      const legacy = localStorage.getItem('md-edit-content');
+      if (legacy !== null) { editor.value = legacy; hasUserContent = true; }
+    }
     const savedNoOl = localStorage.getItem('md-edit-no-ol');
     if (savedNoOl !== null) noOl = savedNoOl === '1';
+    isDark = localStorage.getItem('md-edit-dark') === '1';
   } catch(e) {}
+  filenameInput.value = currentFilename;
+  // Use the existing theme handler after loading the document and settings.
+  if (isDark) { isDark = false; toggleTheme(); }
   document.getElementById('noOlBtn').classList.toggle('toggle-on', noOl);
-  editor.addEventListener('input', render);
+  editor.addEventListener('input', () => { hasUserContent = true; render(); if (searchBar.classList.contains('show')) doSearch(); });
+  setView(currentView);
   render();
 })();
 </script>
