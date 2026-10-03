@@ -119,7 +119,7 @@
   }
   .more-actions button { display: block; text-align: left; width: 100%; }
   .more-actions p { padding: 8px; color: var(--muted); font-size: 12px; line-height: 1.6; }
-  body[data-view="preview"] .toolbar { display: none; }
+  body[data-view="preview"] .toolbar, body[data-view="notes"] .toolbar { display: none; }
 
   /* ── Search/Replace bar ── */
   .search-bar {
@@ -196,10 +196,29 @@
     background: var(--preview-bg); font-size: 15px; line-height: 1.8;
     overflow-wrap: anywhere;
   }
-  body[data-view="preview"] .preview-pane { padding: 24px max(32px, calc((100% - 800px) / 2)); }
+  body[data-view="preview"] .preview-pane, body[data-view="notes"] .preview-pane { padding: 24px max(32px, calc((100% - 800px) / 2)); }
   .preview-pane > :first-child { margin-top: 0; }
   .preview-pane .table-scroll { overflow-x: auto; margin: 12px 0; }
   .preview-pane .table-scroll table { margin: 0; }
+  /* Lifelog grouping is a preview layout; source text stays in file order. */
+  .lifelog-summary { color: var(--muted); font-size: .82em; margin-bottom: 18px; }
+  .lifelog-day { border: 1px solid var(--border); border-radius: 12px; margin: 0 0 18px; overflow: hidden; }
+  .preview-pane .lifelog-day-title {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 14px;
+    font-size: 1.08em; margin: 0; padding: 12px 16px; background: var(--accent-bg);
+  }
+  .lifelog-day-count { color: var(--muted); font-size: .75em; font-weight: 400; margin-left: auto; }
+  .preview-pane .lifelog-entries { list-style: none; padding: 0; margin: 0; }
+  .preview-pane .lifelog-entry {
+    display: grid; grid-template-columns: 5em minmax(0, 1fr); gap: 12px;
+    padding: 14px 16px; margin: 0; border-top: 1px solid var(--border);
+  }
+  .lifelog-entry-time { color: var(--accent); font-size: .86em; font-variant-numeric: tabular-nums; }
+  .lifelog-entry-time.unknown { color: var(--muted); font-size: .75em; }
+  .lifelog-entry-body { min-width: 0; }
+  .lifelog-entry-body > :first-child { margin-top: 0; }
+  .lifelog-entry-body > :last-child { margin-bottom: 0; }
+  .lifelog-recorded { color: var(--muted); font-size: .75em; margin-top: 6px; }
   .preview-pane h1 {
     font-size: 1.85em; font-weight: 700; margin: 24px 0 12px;
     padding-bottom: 8px; border-bottom: 2px solid rgba(91,95,199,.25);
@@ -285,13 +304,13 @@
   }
 
   @media (max-width: 700px) {
-    .header { padding: 6px 12px; gap: 8px; flex-shrink: 0; }
+    .header { padding: 6px 12px; gap: 4px 8px; flex-shrink: 0; flex-wrap: wrap; }
     .logo-mark { font-size: 16px; white-space: nowrap; }
     .logo-mark span { display: none; }
     .stats { display: none; }
-    .header-right { gap: 2px; }
+    .header-right { gap: 2px; flex-shrink: 0; margin-left: auto; }
     .header-right .divider, [data-view="split"] { display: none; }
-    .btn { min-height: 44px; padding: 8px 10px; font-size: 14px; }
+    .btn { min-height: 44px; padding: 8px; font-size: 14px; white-space: nowrap; }
     #themeBtn { min-width: 44px; }
     .document-bar { padding: 8px 12px; flex-wrap: wrap; gap: 6px; flex-shrink: 0; }
     .document-info { flex-basis: 100%; }
@@ -308,6 +327,8 @@
     .preview-pane { padding: 18px 16px !important; font-size: 17px; line-height: 1.85; }
     .preview-pane h1 { font-size: 1.55em; }
     .preview-pane h2 { font-size: 1.3em; }
+    .preview-pane .lifelog-day-title { font-size: 1.05em; padding: 10px 12px; }
+    .preview-pane .lifelog-entry { grid-template-columns: 1fr; gap: 2px; padding: 12px; }
     .preview-pane pre { padding: 12px; font-size: 13px; }
     .preview-pane th, .preview-pane td { min-width: 100px; padding: 8px 10px; }
     #editor { padding: 16px; font-size: 16px; line-height: 1.8; }
@@ -335,6 +356,7 @@
     <button class="btn" data-view="edit" onclick="setView('edit')" aria-pressed="false">✎ 編輯</button>
     <button class="btn active" data-view="split" onclick="setView('split')" aria-pressed="true">◫ 分割</button>
     <button class="btn" data-view="preview" onclick="setView('preview')" aria-pressed="false">◉ 預覽</button>
+    <button class="btn" data-view="notes" onclick="setView('notes')" aria-pressed="false">▤ 筆記</button>
     <div class="divider"></div>
     <button class="btn" id="themeBtn" onclick="toggleTheme()" title="切換深色/淺色" aria-label="切換深色或淺色模式">🌙</button>
   </div>
@@ -497,6 +519,96 @@ function parseMd(src) {
   return fallbackParseMd(src);
 }
 
+// ── Lifelog preview: event date first, recording time on backfilled entries ──
+function lifelogDate(code) {
+  const year = 2000 + Number(code.slice(0, 2));
+  const month = Number(code.slice(2, 4));
+  const day = Number(code.slice(4, 6));
+  const stamp = Date.UTC(year, month - 1, day);
+  const date = new Date(stamp);
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  return { stamp, iso: `${year}-${code.slice(2, 4)}-${code.slice(4, 6)}` };
+}
+
+function lifelogTime(hour, minute) {
+  if (Number(hour) > 23 || Number(minute) > 59) return null;
+  return `${hour.padStart(2, '0')}:${minute}`;
+}
+
+function parseLifelog(src) {
+  const lines = src.replace(/\r\n?/g, '\n').split('\n');
+  const entries = [];
+  let current = null;
+  let fence = null;
+  for (const line of lines) {
+    const match = !fence && line.match(/^-\s+(\d{6})[ \t]+(\d{2}):(\d{2})(?:[ \t]+(.*))?$/);
+    if (match) {
+      const written = lifelogDate(match[1]);
+      const recordedTime = lifelogTime(match[2], match[3]);
+      if (!written || !recordedTime) return null;
+      current = { written, recordedTime, event: written, time: recordedTime,
+        content: match[4] || '', backfill: false, sequence: entries.length };
+      entries.push(current);
+      const openingFence = current.content.match(/^ {0,3}(`{3,}|~{3,})/);
+      if (openingFence) fence = openingFence[1];
+    } else if (current) {
+      // The bot indents continuation lines by two spaces. Keep fenced content intact.
+      const continuation = line.startsWith('  ') ? line.slice(2) : line;
+      current.content += '\n' + continuation;
+      const marker = continuation.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+      if (marker) {
+        if (!fence) fence = marker[1];
+        else if (marker[1][0] === fence[0] && marker[1].length >= fence.length && !marker[2].trim()) fence = null;
+      }
+    } else if (line.trim()) {
+      return null;
+    }
+  }
+  if (!entries.length) return null;
+
+  entries.forEach(entry => {
+    const match = entry.content.match(/^[ \t]*(\d{6})(?:[ \t]+(\d{1,2})[:：](\d{2}))?(?=[ \t]|\n|$)/);
+    if (!match) return;
+    const event = lifelogDate(match[1]);
+    const days = event && (entry.written.stamp - event.stamp) / 86400000;
+    // Match the bot's backfill rule: a valid earlier date, within 365 days.
+    if (!event || days <= 0 || days > 365) return;
+    entry.event = event;
+    entry.backfill = true;
+    entry.time = match[2] === undefined ? null : lifelogTime(match[2], match[3]);
+    // An invalid event time remains part of the content, as it does in the bot.
+    const prefixLength = entry.time ? match[0].length : match[0].indexOf(match[1]) + 6;
+    entry.content = entry.content.slice(prefixLength).trim();
+  });
+  entries.sort((a, b) => a.event.stamp - b.event.stamp
+    || Number(a.time === null) - Number(b.time === null)
+    || (a.time || '').localeCompare(b.time || '') || a.sequence - b.sequence);
+  return entries;
+}
+
+function renderLifelogPreview(src) {
+  const entries = parseLifelog(src);
+  if (!entries) return null;
+  const days = new Map();
+  entries.forEach(entry => {
+    const key = entry.event.iso;
+    if (!days.has(key)) days.set(key, []);
+    days.get(key).push(entry);
+  });
+  const groups = [...days].map(([date, records]) => {
+    const weekday = '日一二三四五六'[new Date(records[0].event.stamp).getUTCDay()];
+    const rows = records.map(entry => {
+      const time = entry.time === null ? '<span>未填時刻</span>'
+        : `<time datetime="${date}T${entry.time}">${entry.time}</time>`;
+      const recorded = entry.backfill
+        ? `<div class="lifelog-recorded">↳ <time datetime="${entry.written.iso}T${entry.recordedTime}">${entry.written.iso.replace(/-/g, '/')} ${entry.recordedTime}</time> 補記</div>` : '';
+      return `<li class="lifelog-entry"><div class="lifelog-entry-time${entry.time === null ? ' unknown' : ''}">${time}</div><div class="lifelog-entry-body">${parseMd(entry.content)}${recorded}</div></li>`;
+    }).join('');
+    return `<section class="lifelog-day" data-event-date="${date}" aria-label="${date} 的記錄"><h2 class="lifelog-day-title"><time datetime="${date}">${date.replace(/-/g, '/')}（${weekday}）</time><span class="lifelog-day-count">${records.length} 筆</span></h2><ol class="lifelog-entries">${rows}</ol></section>`;
+  }).join('');
+  return `<div class="lifelog-summary">依發生日期整理 · ${days.size} 天 · ${entries.length} 筆</div>${groups}`;
+}
+
 // ── State ──
 const editor = document.getElementById('editor');
 const preview = document.getElementById('preview');
@@ -611,7 +723,9 @@ let renderGeneration = 0; // tracks render epochs to discard stale async results
 
 function render() {
   renderGeneration++;
-  preview.innerHTML = parseMd(editor.value);
+  preview.innerHTML = currentView === 'notes'
+    ? renderLifelogPreview(editor.value) ?? '<div class="lifelog-summary">未找到日期記錄，以下顯示原文預覽。</div>' + parseMd(editor.value)
+    : parseMd(editor.value);
   preview.querySelectorAll('table').forEach(table => {
     const wrapper = document.createElement('div');
     wrapper.className = 'table-scroll';
@@ -707,19 +821,23 @@ function updateStats() {
 }
 
 // ── View switching ──
+function isReadingView(v = currentView) { return v === 'preview' || v === 'notes'; }
+
 function setView(v) {
   if (mobileLayout.matches && v === 'split') v = 'preview';
+  const changesNotes = (v === 'notes') !== (currentView === 'notes');
   currentView = v;
   document.body.dataset.view = v;
   document.querySelectorAll('[data-view]').forEach(b => {
     b.classList.toggle('active', b.dataset.view === v);
     b.setAttribute('aria-pressed', String(b.dataset.view === v));
   });
-  editorPane.classList.toggle('hidden', v === 'preview');
+  editorPane.classList.toggle('hidden', isReadingView(v));
   editorPane.classList.toggle('full', v === 'edit');
   preview.classList.toggle('hidden', v === 'edit');
   editorPane.style.borderRight = v === 'split' ? '1px solid var(--border)' : 'none';
-  if (v === 'preview') editor.blur();
+  if (isReadingView(v)) editor.blur();
+  if (changesNotes) render();
   if (searchBar.classList.contains('show')) doSearch();
   // When switching to a view that shows the preview, render mermaid blocks immediately
   if (v !== 'edit' && mermaidReady) {
@@ -761,7 +879,7 @@ const searchInfo = document.getElementById('searchInfo');
 let sCase = false, sRegex = false, sMatches = [], sIdx = -1, previewMatchIdx = 0;
 
 function toggleSearch(withReplace) {
-  if (withReplace && currentView === 'preview') setView('edit');
+  if (withReplace && isReadingView()) setView('edit');
   const visible = searchBar.classList.contains('show');
   const replaceRow = document.getElementById('replaceRow');
   if (!visible) {
@@ -786,7 +904,7 @@ function closeSearch() {
   sMatches = []; sIdx = -1;
   searchInfo.textContent = '';
   clearPreviewHighlights();
-  if (currentView !== 'preview') editor.focus();
+  if (!isReadingView()) editor.focus();
 }
 
 function toggleCase() { sCase = !sCase; document.getElementById('sCaseBtn').classList.toggle('on', sCase); doSearch(); }
@@ -810,6 +928,9 @@ function doSearch() {
     searchInfo.textContent = '正規式錯誤';
     return;
   }
+
+  // Notes show readable dates instead of source date codes; search what is visible.
+  if (currentView === 'notes') { highlightPreview(); return; }
 
   if (sMatches.length === 0) {
     searchInfo.textContent = '0 筆';
@@ -840,7 +961,7 @@ function highlightMatch(focusEditor = true) {
 
   // Only steal focus & select when navigating (▲▼ / Enter), not while typing in search
   if (focusEditor) {
-    if (currentView === 'preview') {
+    if (isReadingView()) {
       highlightPreviewMatch(true);
       return;
     }
@@ -897,7 +1018,7 @@ function highlightPreview() {
     if (last < text.length) frag.appendChild(document.createTextNode(text.substring(last)));
     node.replaceWith(frag);
   });
-  if (currentView === 'preview') highlightPreviewMatch(false);
+  if (isReadingView()) highlightPreviewMatch(false);
 }
 
 function highlightPreviewMatch(scroll) {
@@ -912,14 +1033,14 @@ function highlightPreviewMatch(scroll) {
 }
 
 function searchNext() {
-  if (currentView === 'preview') { previewMatchIdx++; highlightPreviewMatch(true); return; }
+  if (isReadingView()) { previewMatchIdx++; highlightPreviewMatch(true); return; }
   if (sMatches.length === 0) { doSearch(); return; }
   sIdx = (sIdx + 1) % sMatches.length;
   highlightMatch();
 }
 
 function searchPrev() {
-  if (currentView === 'preview') { previewMatchIdx--; highlightPreviewMatch(true); return; }
+  if (isReadingView()) { previewMatchIdx--; highlightPreviewMatch(true); return; }
   if (sMatches.length === 0) { doSearch(); return; }
   sIdx = (sIdx - 1 + sMatches.length) % sMatches.length;
   highlightMatch();
@@ -976,7 +1097,7 @@ replaceInput.addEventListener('keydown', e => {
 
 // ── Insert markdown ──
 function ins(prefix, suffix) {
-  if (currentView === 'preview') setView('edit');
+  if (isReadingView()) setView('edit');
   const s = editor.selectionStart, e = editor.selectionEnd;
   const sel = editor.value.substring(s, e) || '文字';
   editor.value = editor.value.substring(0, s) + prefix + sel + suffix + editor.value.substring(e);
