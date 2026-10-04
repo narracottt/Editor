@@ -370,16 +370,17 @@
   </div>
   <div class="file-actions">
     <button class="export-btn" onclick="openFile()">📂 開啟</button>
-    <button class="export-btn export-primary" onclick="downloadMd()">⬇ 匯出 .md</button>
+    <button class="export-btn export-primary" id="saveBtn" onclick="saveBack()">⬇ 匯出 .md</button>
     <button class="export-btn" onclick="toggleSearch(false)" aria-label="搜尋內容">⌕ 搜尋</button>
     <details class="more-menu" id="moreMenu">
       <summary class="export-btn">更多 ▾</summary>
       <div class="more-actions">
         <button class="export-btn" onclick="newFile()">📄 新增文件</button>
         <button class="export-btn" onclick="toggleSearch(true); closeMore()">搜尋與取代</button>
+        <button class="export-btn" onclick="downloadMd(); closeMore()">匯出副本 .md</button>
         <button class="export-btn" onclick="downloadHtml(); closeMore()">匯出 .html</button>
         <button class="export-btn" onclick="copyHtml(); closeMore()">複製 HTML</button>
-        <p>草稿只保存在此瀏覽器。匯出會下載副本，原始檔案需自行替換。</p>
+        <p id="saveHint">草稿只保存在此瀏覽器。匯出會下載副本，原始檔案需自行替換。</p>
       </div>
     </details>
   </div>
@@ -401,6 +402,7 @@
   <div class="divider"></div>
   <button class="tool-btn" id="noOlBtn" onclick="toggleNoOl()" title="停用數字列表解析（專利模式）">1.⃠</button>
   <input type="file" id="fileInput" accept=".md,.markdown,.txt" hidden>
+  <input type="file" id="verifyInput" accept=".md,.markdown,.txt" hidden>
 </div>
 
 <!-- Search/Replace bar -->
@@ -535,13 +537,15 @@ function lifelogTime(hour, minute) {
   return `${hour.padStart(2, '0')}:${minute}`;
 }
 
+const LIFELOG_ENTRY_RE = /^-\s+(\d{6})[ \t]+(\d{2}):(\d{2})(?:[ \t]+(.*))?$/;
+
 function parseLifelog(src) {
   const lines = src.replace(/\r\n?/g, '\n').split('\n');
   const entries = [];
   let current = null;
   let fence = null;
   for (const line of lines) {
-    const match = !fence && line.match(/^-\s+(\d{6})[ \t]+(\d{2}):(\d{2})(?:[ \t]+(.*))?$/);
+    const match = !fence && line.match(LIFELOG_ENTRY_RE);
     if (match) {
       const written = lifelogDate(match[1]);
       const recordedTime = lifelogTime(match[2], match[3]);
@@ -625,6 +629,17 @@ let exportedFilename = null;
 let hasUserContent = false;
 let draftSaved = false;
 let fileLoadGeneration = 0;
+// Save-back state. baseContent is the original file's text as last read from or
+// written to disk; pendingBase is the last downloaded copy, which the user may
+// or may not have put in place of the original. The handle never survives a reload.
+const hasFsApi = 'showOpenFilePicker' in window && 'showSaveFilePicker' in window;
+const PICKER_TYPES = [{ description: 'Markdown', accept: { 'text/markdown': ['.md', '.markdown'], 'text/plain': ['.txt'] } }];
+let fileHandle = null;
+let baseContent = null;
+let pendingBase = null;
+let boundFilename = null;
+let loadedAt = null;
+let saving = false;
 
 function normalizeFilename(name) {
   const clean = name.trim().replace(/[\\/:*?"<>|\u0000-\u001f]/g, '-');
@@ -636,16 +651,30 @@ function needsExport() {
   return editor.value !== exportedContent || currentFilename !== exportedFilename;
 }
 
+function formatLoadedAt(stamp) {
+  const d = new Date(stamp);
+  const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return d.toDateString() === new Date().toDateString() ? time : `${d.getMonth() + 1}/${d.getDate()} ${time}`;
+}
+
 function persistDraft() {
+  const draft = { content: editor.value, filename: currentFilename, needsExport: needsExport(), hasUserContent };
   try {
-    localStorage.setItem('md-edit-draft', JSON.stringify({
-      content: editor.value, filename: currentFilename, needsExport: needsExport(), hasUserContent
-    }));
+    try {
+      localStorage.setItem('md-edit-draft', JSON.stringify({ ...draft, baseContent, pendingBase, boundFilename, loadedAt }));
+    } catch(e) {
+      // Out of quota: keep the draft itself; without the base it restores as a new document.
+      localStorage.setItem('md-edit-draft', JSON.stringify(draft));
+    }
     draftSaved = true;
   } catch(e) { draftSaved = false; }
-  draftStatus.textContent = draftSaved
-    ? '草稿已存於此瀏覽器' + (needsExport() ? ' · 待匯出 .md' : '')
-    : '無法保存瀏覽器草稿 · 請匯出 .md';
+  if (!draftSaved) { draftStatus.textContent = '無法保存瀏覽器草稿 · 請匯出 .md'; return; }
+  const loaded = baseContent !== null && loadedAt ? ` · 原檔載入於 ${formatLoadedAt(loadedAt)}` : '';
+  const pending = !needsExport() ? ''
+    : fileHandle ? ' · 尚未儲存'
+    : hasFsApi && baseContent !== null ? ' · 儲存前需重新選取原檔'
+    : hasFsApi ? ' · 尚未儲存' : ' · 待匯出 .md';
+  draftStatus.textContent = (fileHandle ? '已連結原檔' : '草稿已存於此瀏覽器') + loaded + pending;
 }
 
 function commitFilename() {
@@ -712,7 +741,7 @@ flowchart TD
     S150 --> S160
 \`\`\`
 
-> 💡 快捷鍵：Ctrl+B 粗體、Ctrl+I 斜體、Ctrl+K 連結、Ctrl+F 搜尋、Ctrl+H 搜尋取代、Ctrl+O 開檔、Ctrl+S 匯出副本
+> 💡 快捷鍵：Ctrl+B 粗體、Ctrl+I 斜體、Ctrl+K 連結、Ctrl+F 搜尋、Ctrl+H 搜尋取代、Ctrl+O 開檔、Ctrl+S 儲存／匯出
 
 ---
 
@@ -1114,7 +1143,7 @@ editor.addEventListener('keydown', e => {
     if (e.key === 'b') { e.preventDefault(); ins('**','**'); }
     if (e.key === 'i') { e.preventDefault(); ins('*','*'); }
     if (e.key === 'k') { e.preventDefault(); ins('[','](url)'); }
-    if (e.key === 's') { e.preventDefault(); downloadMd(); }
+    if (e.key === 's') { e.preventDefault(); saveBack(); }
     if (e.key === 'o') { e.preventDefault(); openFile(); }
   }
   if (e.key === 'Tab') {
@@ -1144,7 +1173,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeMore();
   if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'o') && e.target !== editor) {
     e.preventDefault();
-    e.key === 's' ? downloadMd() : openFile();
+    e.key === 's' ? saveBack() : openFile();
   }
   // F3 works globally (search box, replace box, editor, anywhere)
   if (e.key === 'F3' && !e.ctrlKey && !e.metaKey) {
@@ -1164,7 +1193,7 @@ editor.addEventListener('scroll', () => {
 
 // ── New file ──
 function newFile() {
-  if (!canReplaceDocument()) return;
+  if (saving || !canReplaceDocument()) return;
   fileLoadGeneration++;
   editor.value = '';
   currentFilename = 'document.md';
@@ -1172,6 +1201,7 @@ function newFile() {
   exportedContent = null;
   exportedFilename = null;
   hasUserContent = false;
+  fileHandle = baseContent = pendingBase = boundFilename = loadedAt = null;
   closeMore();
   setView('edit');
   render();
@@ -1181,7 +1211,11 @@ function newFile() {
 
 // ── Open file ──
 function openFile() {
-  document.getElementById('fileInput').click();
+  if (saving) return;
+  if (!hasFsApi) { document.getElementById('fileInput').click(); return; }
+  window.showOpenFilePicker({ id: 'md-edit', types: PICKER_TYPES })
+    .then(async ([handle]) => loadFile(await handle.getFile(), handle))
+    .catch(e => { if (e.name !== 'AbortError') showToast('檔案讀取失敗'); });
 }
 
 function canReplaceDocument() {
@@ -1189,25 +1223,27 @@ function canReplaceDocument() {
     || confirm('目前內容尚未匯出，載入其他文件會取代此瀏覽器草稿。確定繼續？');
 }
 
-function loadFile(file) {
-  if (!canReplaceDocument()) return;
+function loadFile(file, handle = null) {
+  if (saving || !canReplaceDocument()) return;
   const generation = ++fileLoadGeneration;
-  const reader = new FileReader();
-  reader.onload = ev => {
+  file.text().then(text => {
     if (generation !== fileLoadGeneration) return;
-    editor.value = ev.target.result;
+    editor.value = text;
     currentFilename = normalizeFilename(file.name);
     filenameInput.value = currentFilename;
     exportedContent = editor.value;
     exportedFilename = currentFilename;
     hasUserContent = true;
+    fileHandle = handle;
+    baseContent = text;
+    pendingBase = null;
+    boundFilename = currentFilename;
+    loadedAt = Date.now();
     editor.scrollTop = preview.scrollTop = 0;
     render();
     if (mobileLayout.matches) setView('preview');
     showToast(`已開啟 ${file.name}`);
-  };
-  reader.onerror = () => showToast('檔案讀取失敗');
-  reader.readAsText(file, 'utf-8');
+  }, () => showToast('檔案讀取失敗'));
 }
 
 const fileInput = document.getElementById('fileInput');
@@ -1224,12 +1260,160 @@ function cleanExport(html) { return html.replace(/&#46;/g, '.'); }
 
 function downloadMd() {
   commitFilename();
+  showMerged(withFinalNewline(editor.value));
   dl(editor.value, currentFilename, 'text/markdown;charset=utf-8');
   exportedContent = editor.value;
   exportedFilename = currentFilename;
-  persistDraft();
+  if (baseContent !== null) pendingBase = editor.value;
+  render();
   showToast('已準備下載副本；原始檔案需自行替換');
 }
+
+// ── Save back ──
+// The lifelog bot only appends to the month file. If the original grew while this
+// document was open, the new tail is kept after the edited text; any other change
+// to the original stops the save.
+// A month file must end with a newline, or the bot's next record joins the last line.
+function withFinalNewline(text) {
+  return text && !text.endsWith('\n') && parseLifelog(text) ? text + '\n' : text;
+}
+
+function mergeAppended(base, disk, edited) {
+  if (!disk.startsWith(base)) return { error: '原檔在載入後有刪改或截斷' };
+  let tail = disk.slice(base.length);
+  if (base && !base.endsWith('\n')) tail = tail.replace(/^\r?\n/, '');
+  const lines = tail ? tail.split('\n').map(line => line.replace(/\r$/, '')) : [];
+  // The bot writes a record line, then continuation lines indented by two spaces. Anything else
+  // (such as a record line with a malformed time) means the tail is not a clean append.
+  const entries = lines.map(line => line.match(LIFELOG_ENTRY_RE));
+  const clean = tail.endsWith('\n') && entries[0] && lines.slice(0, -1).every((line, i) =>
+    entries[i] ? lifelogDate(entries[i][1]) && lifelogTime(entries[i][2], entries[i][3]) : line.startsWith('  '));
+  if (tail && !clean) return { error: '原檔新增的內容不是完整的 lifelog 記錄' };
+  const head = tail && edited && !edited.endsWith('\n') ? edited + '\n' : withFinalNewline(edited);
+  return { content: head + tail, added: entries.filter(Boolean).length };
+}
+
+// Matching content alone does not prove the re-selected file is the original.
+function isBoundFile(name) {
+  if (normalizeFilename(name) === boundFilename) return true;
+  alert(`選取的檔案是「${name}」，與原檔「${boundFilename}」不同，已停止儲存。`);
+  return false;
+}
+
+// Block edits while the file is read and written, so the saved text and the editor cannot drift apart.
+function setSaving(on) {
+  saving = on;
+  if (on) fileLoadGeneration++;
+  document.body.inert = on;
+}
+
+function mergeWithDisk(disk) {
+  // A downloaded copy may or may not have replaced the original. Of the two texts, the longer
+  // one the file still starts with is presumed to be on disk; the shorter would need the bot
+  // to have appended exactly what the edit removed or added (timestamps are minute-precise).
+  const base = [baseContent, pendingBase].filter(b => b !== null && disk.startsWith(b))
+    .sort((a, b) => b.length - a.length)[0] ?? baseContent;
+  const merged = mergeAppended(base, disk, editor.value);
+  if (merged.error) {
+    alert(`${merged.error}，已停止儲存，原檔未變更。\n\n請確認選取的是原檔，或重新開啟原檔後再修改；目前內容可用「更多 → 匯出副本 .md」另存。`);
+    return null;
+  }
+  return merged;
+}
+
+function showMerged(content) {
+  if (editor.value === content) return;
+  const { selectionStart, selectionEnd, scrollTop } = editor;
+  editor.value = content;
+  editor.setSelectionRange(selectionStart, selectionEnd);
+  editor.scrollTop = scrollTop;
+}
+
+function addedNote(added) { return added ? `，並保留 ${added} 筆新增記錄` : ''; }
+
+async function writeHandle(handle, content) {
+  const writable = await handle.createWritable();
+  await writable.write(content);
+  await writable.close();
+}
+
+async function saveBack() {
+  if (saving) return;
+  commitFilename();
+  closeMore();
+  if (!hasFsApi) {
+    if (baseContent === null || currentFilename !== boundFilename) downloadMd();
+    else { showToast(`請選取原檔 ${boundFilename} 以核對`); document.getElementById('verifyInput').click(); }
+    return;
+  }
+  const hadFocus = document.activeElement === editor;
+  setSaving(true);
+  try {
+    if (baseContent === null || currentFilename !== boundFilename) {
+      const handle = await window.showSaveFilePicker({ id: 'md-edit', suggestedName: currentFilename, types: PICKER_TYPES });
+      showMerged(withFinalNewline(editor.value));
+      await writeHandle(handle, editor.value);
+      fileHandle = handle;
+      currentFilename = boundFilename = normalizeFilename(handle.name);
+      filenameInput.value = currentFilename;
+      baseContent = editor.value;
+      showToast(`已儲存 ${handle.name}`);
+    } else {
+      let handle = fileHandle;
+      if (!handle) {
+        showToast(`請選取原檔 ${boundFilename} 以核對`);
+        [handle] = await window.showOpenFilePicker({ id: 'md-edit', types: PICKER_TYPES });
+        if (!isBoundFile(handle.name)) return;
+      }
+      const disk = await (await handle.getFile()).text();
+      const merged = mergeWithDisk(disk);
+      if (!merged) return;
+      fileHandle = handle;
+      if (merged.content !== disk) {
+        // Asking for write access needs a fresh user gesture, which the picker may have used up.
+        let granted = false;
+        try { granted = await handle.requestPermission({ mode: 'readwrite' }) === 'granted'; } catch(e) {}
+        if (!granted) { persistDraft(); showToast('尚未取得寫入權限；請再按一次儲存'); return; }
+        await writeHandle(handle, merged.content);
+      }
+      showMerged(merged.content);
+      baseContent = merged.content;
+      showToast(`已存回 ${handle.name}` + addedNote(merged.added));
+    }
+    pendingBase = null;
+    loadedAt = Date.now();
+    exportedContent = editor.value;
+    exportedFilename = currentFilename;
+    hasUserContent = true;
+    render();
+  } catch(e) {
+    if (e.name !== 'AbortError') alert(`儲存失敗：${e.message}`);
+  } finally {
+    setSaving(false);
+    if (hadFocus) editor.focus();
+  }
+}
+
+// Without the File System Access API: check against the re-selected original, then download the merged copy.
+document.getElementById('verifyInput').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file || saving || !isBoundFile(file.name)) return;
+  let disk;
+  setSaving(true);
+  try { disk = await file.text(); } catch(err) { showToast('檔案讀取失敗'); return; } finally { setSaving(false); }
+  const merged = mergeWithDisk(disk);
+  if (!merged) return;
+  showMerged(merged.content);
+  dl(merged.content, currentFilename, 'text/markdown;charset=utf-8');
+  // The editor now holds everything on disk, whether or not the copy replaces the original.
+  baseContent = disk;
+  pendingBase = merged.content;
+  exportedContent = editor.value;
+  exportedFilename = currentFilename;
+  render();
+  showToast(`已核對原檔${addedNote(merged.added)}；請用下載的副本替換原檔`);
+});
 function downloadHtml() {
   commitFilename();
   const body = cleanExport(parseMd(editor.value));
@@ -1296,7 +1480,13 @@ document.addEventListener('drop', e => {
   if (!file) return;
   const ok = file.name.endsWith('.md') || file.name.endsWith('.markdown') || file.name.endsWith('.txt');
   if (!ok) { showToast('僅支援 Markdown / TXT'); return; }
-  loadFile(file);
+  // The handle must be requested inside the drop event.
+  const item = e.dataTransfer.items && e.dataTransfer.items[0];
+  if (hasFsApi && item && item.getAsFileSystemHandle) {
+    item.getAsFileSystemHandle().then(
+      handle => loadFile(file, handle && handle.kind === 'file' ? handle : null),
+      () => loadFile(file));
+  } else loadFile(file);
 });
 
 // ── Init ──
@@ -1312,6 +1502,12 @@ document.addEventListener('drop', e => {
         exportedContent = editor.value;
         exportedFilename = currentFilename;
       }
+      if (typeof saved.baseContent === 'string') {
+        baseContent = saved.baseContent;
+        pendingBase = typeof saved.pendingBase === 'string' ? saved.pendingBase : null;
+        boundFilename = typeof saved.boundFilename === 'string' ? saved.boundFilename : currentFilename;
+        loadedAt = typeof saved.loadedAt === 'number' ? saved.loadedAt : null;
+      }
     } else {
       const legacy = localStorage.getItem('md-edit-content');
       if (legacy !== null) { editor.value = legacy; hasUserContent = true; }
@@ -1321,6 +1517,12 @@ document.addEventListener('drop', e => {
     isDark = localStorage.getItem('md-edit-dark') === '1';
   } catch(e) {}
   filenameInput.value = currentFilename;
+  if (hasFsApi) {
+    document.getElementById('saveBtn').textContent = '💾 儲存';
+    document.getElementById('saveHint').textContent = '草稿只保存在此瀏覽器。儲存會直接寫回原檔，並保留原檔在開啟後新增的 lifelog 記錄；重新開啟頁面後需重新選取原檔。';
+  } else {
+    document.getElementById('saveHint').textContent = '草稿只保存在此瀏覽器。匯出前會請你重新選取原檔核對，再下載副本，原始檔案需自行替換。';
+  }
   // Use the existing theme handler after loading the document and settings.
   if (isDark) { isDark = false; toggleTheme(); }
   document.getElementById('noOlBtn').classList.toggle('toggle-on', noOl);
