@@ -634,6 +634,9 @@ let fileLoadGeneration = 0;
 // or may not have put in place of the original. The handle never survives a reload.
 const hasFsApi = 'showOpenFilePicker' in window && 'showSaveFilePicker' in window;
 const PICKER_TYPES = [{ description: 'Markdown', accept: { 'text/markdown': ['.md', '.markdown'], 'text/plain': ['.txt'] } }];
+// Open pickers take no type filter: a file this page has written carries the browser's download
+// mark, and the macOS picker greys such a file out under a filter. The name is checked instead.
+function isTextFile(name) { return /\.(md|markdown|txt)$/i.test(name); }
 let fileHandle = null;
 let baseContent = null;
 let pendingBase = null;
@@ -1213,8 +1216,11 @@ function newFile() {
 function openFile() {
   if (saving) return;
   if (!hasFsApi) { document.getElementById('fileInput').click(); return; }
-  window.showOpenFilePicker({ id: 'md-edit', types: PICKER_TYPES })
-    .then(async ([handle]) => loadFile(await handle.getFile(), handle))
+  window.showOpenFilePicker({ id: 'md-edit' })
+    .then(async ([handle]) => {
+      if (!isTextFile(handle.name)) { showToast('僅支援 Markdown / TXT'); return; }
+      loadFile(await handle.getFile(), handle);
+    })
     .catch(e => { if (e.name !== 'AbortError') showToast('檔案讀取失敗'); });
 }
 
@@ -1362,7 +1368,7 @@ async function saveBack() {
       let handle = fileHandle;
       if (!handle) {
         showToast(`請選取原檔 ${boundFilename} 以核對`);
-        [handle] = await window.showOpenFilePicker({ id: 'md-edit', types: PICKER_TYPES });
+        [handle] = await window.showOpenFilePicker({ id: 'md-edit' });
         if (!isBoundFile(handle.name)) return;
       }
       const disk = await (await handle.getFile()).text();
@@ -1478,8 +1484,7 @@ document.addEventListener('drop', e => {
   dragCounter = 0; overlay.classList.remove('show');
   const file = e.dataTransfer.files[0];
   if (!file) return;
-  const ok = file.name.endsWith('.md') || file.name.endsWith('.markdown') || file.name.endsWith('.txt');
-  if (!ok) { showToast('僅支援 Markdown / TXT'); return; }
+  if (!isTextFile(file.name)) { showToast('僅支援 Markdown / TXT'); return; }
   // The handle must be requested inside the drop event.
   const item = e.dataTransfer.items && e.dataTransfer.items[0];
   if (hasFsApi && item && item.getAsFileSystemHandle) {
