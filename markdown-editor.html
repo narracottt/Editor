@@ -1301,7 +1301,8 @@ function mergeAppended(base, disk, edited) {
 
 // Matching content alone does not prove the re-selected file is the original.
 function isBoundFile(name) {
-  if (normalizeFilename(name) === boundFilename) return true;
+  // normalizeFilename() turns `x.html` into `x.md`, so the extension is checked first.
+  if (isTextFile(name) && normalizeFilename(name) === boundFilename) return true;
   alert(`選取的檔案是「${name}」，與原檔「${boundFilename}」不同，已停止儲存。`);
   return false;
 }
