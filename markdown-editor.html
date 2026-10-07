@@ -201,7 +201,32 @@
   .preview-pane .table-scroll { overflow-x: auto; margin: 12px 0; }
   .preview-pane .table-scroll table { margin: 0; }
   /* Lifelog grouping is a preview layout; source text stays in file order. */
-  .lifelog-summary { color: var(--muted); font-size: .82em; margin-bottom: 18px; }
+  .lifelog-summary { color: var(--muted); font-size: .82em; margin-bottom: 18px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .lifelog-order, .lifelog-edit {
+    border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
+    color: var(--muted); font: inherit; cursor: pointer;
+  }
+  .lifelog-order { padding: 3px 10px; margin-left: auto; }
+  .lifelog-order[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .lifelog-edit { padding: 0 7px; font-size: 13px; line-height: 1.7; }
+  .lifelog-order:hover, .lifelog-edit:hover { border-color: var(--accent); color: var(--accent); }
+  .lifelog-order[aria-pressed="true"]:hover { color: #fff; filter: brightness(1.1); }
+  .lifelog-problems { border: 1px solid rgba(220,50,50,.35); border-radius: 12px; margin: 0 0 18px; padding: 12px 16px; background: rgba(220,50,50,.06); }
+  .preview-pane .lifelog-problems h2 { font-size: 1.02em; margin: 0 0 4px; color: #c33; }
+  .preview-pane .lifelog-problems p { font-size: .82em; color: var(--muted); margin: 0 0 8px; }
+  .preview-pane .lifelog-problems ol { list-style: none; padding: 0; margin: 0; }
+  .preview-pane .lifelog-problem { margin: 10px 0 0; }
+  .lifelog-problem-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: .86em; }
+  .lifelog-problem-head .lifelog-edit { margin-left: auto; }
+  .preview-pane .lifelog-problem pre { margin: 6px 0 0; padding: 8px 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .lifelog-todo-row { display: flex; align-items: baseline; gap: 8px; margin: 8px 0; }
+  .lifelog-todo {
+    flex-shrink: 0; padding: 0 7px; border-radius: 5px; font-size: .75em; font-weight: 600;
+    color: var(--accent); background: var(--accent-bg); border: 1px solid var(--accent);
+  }
+  .lifelog-todo-text { min-width: 0; }
+  .lifelog-todo-text > :first-child { margin-top: 0; }
+  .lifelog-todo-text > :last-child { margin-bottom: 0; }
   .lifelog-day { border: 1px solid var(--border); border-radius: 12px; margin: 0 0 18px; overflow: hidden; }
   .preview-pane .lifelog-day-title {
     display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 14px;
@@ -213,7 +238,7 @@
     display: grid; grid-template-columns: 5em minmax(0, 1fr); gap: 12px;
     padding: 14px 16px; margin: 0; border-top: 1px solid var(--border);
   }
-  .lifelog-entry-time { color: var(--accent); font-size: .86em; font-variant-numeric: tabular-nums; }
+  .lifelog-entry-time { color: var(--accent); font-size: .86em; font-variant-numeric: tabular-nums; display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 4px; }
   .lifelog-entry-time.unknown { color: var(--muted); font-size: .75em; }
   .lifelog-entry-body { min-width: 0; }
   .lifelog-entry-body > :first-child { margin-top: 0; }
@@ -329,6 +354,8 @@
     .preview-pane h2 { font-size: 1.3em; }
     .preview-pane .lifelog-day-title { font-size: 1.05em; padding: 10px 12px; }
     .preview-pane .lifelog-entry { grid-template-columns: 1fr; gap: 2px; padding: 12px; }
+    .lifelog-entry-time { align-items: center; }
+    .lifelog-order, .lifelog-edit { min-width: 44px; min-height: 36px; font-size: 14px; }
     .preview-pane pre { padding: 12px; font-size: 13px; }
     .preview-pane th, .preview-pane td { min-width: 100px; padding: 8px 10px; }
     #editor { padding: 16px; font-size: 16px; line-height: 1.8; }
@@ -538,63 +565,160 @@ function lifelogTime(hour, minute) {
 }
 
 const LIFELOG_ENTRY_RE = /^-\s+(\d{6})[ \t]+(\d{2}):(\d{2})(?:[ \t]+(.*))?$/;
+// A line that was probably meant as a record but does not have the record shape; the bot
+// silently joins it to the previous record. Kept narrow so list items in notes are not flagged.
+const LIFELOG_NEAR_RE = /^ ?-[ \t]*\d{5,7}[ \t]*\d{1,2}[:：]\d{1,2}/;
+const LIFELOG_CODE_RE = /^[ \t]*(\d{6})(?:[ \t]+(\d{1,2})[:：](\d{2}))?(?=[ \t]|\n|$)/;
+const LIFELOG_MONTH_FILE_RE = /^\d{4}-(0[1-9]|1[0-2])\.md$/;
+// The bot's todo marker: + or ＋ first on the line, with something after it.
+const LIFELOG_TODO_RE = /^\s*[+＋]\s*(?=\S)/;
+const LIFELOG_PROBLEM_LABELS = {
+  value: '日期或時間無效',
+  shape: '時間戳格式不符，bot 會把這行併入上一筆',
+  leading: '第一筆記錄之前的文字',
+};
 
-function parseLifelog(src) {
+function nextFence(fence, text) {
+  const marker = text.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+  if (!marker) return fence;
+  if (!fence) return marker[1];
+  return marker[1][0] === fence[0] && marker[1].length >= fence.length && !marker[2].trim() ? null : fence;
+}
+
+// A leading date code the bot accepts: a valid date within 365 days of the day it was written.
+function lifelogCode(text, written) {
+  const match = text.match(LIFELOG_CODE_RE);
+  const event = match && lifelogDate(match[1]);
+  if (!event || Math.abs(written.stamp - event.stamp) > 365 * 86400000) return null;
+  const time = match[2] === undefined ? null : lifelogTime(match[2], match[3]);
+  // An invalid event time remains part of the content, as it does in the bot.
+  return { event, time, length: time ? match[0].length : match[0].indexOf(match[1]) + 6 };
+}
+
+// Split a record the way the bot does: a todo marker opens a todo, and the lines after it are
+// its notes until the next marker. Only a record whose first line is a todo has todo lines.
+function lifelogSegments(entry) {
+  const lines = entry.content.split('\n');
+  // `261010 +買票` written on or before that day is a todo that keeps its date code.
+  const code = entry.backfill ? null : lifelogCode(lines[0], entry.written);
+  const prefix = code ? lines[0].slice(0, code.length).trim() + ' ' : '';
+  const rest = code ? lines[0].slice(code.length) : lines[0];
+  const marker = rest.match(LIFELOG_TODO_RE);
+  const segments = [{ todo: !!marker, lines: [marker ? prefix + rest.slice(marker[0].length) : lines[0]] }];
+  // The bot does not look at code fences here, so a marker inside one is still a todo.
+  lines.slice(1).forEach(line => {
+    const todo = marker && !entry.backfill && line.match(LIFELOG_TODO_RE);
+    if (todo) segments.push({ todo: true, lines: [line.slice(todo[0].length)] });
+    else segments[segments.length - 1].lines.push(line);
+  });
+  // `\+` is already a Markdown escape; `\＋` is not, so drop its backslash for display.
+  return segments.map(segment => ({ todo: segment.todo, text: segment.lines.join('\n').replace(/^(\s*)\\(?=＋)/gm, '$1') }));
+}
+
+// Reads every record with its place in the source. Lines that cannot be read as records are
+// returned as problems instead of being dropped or stopping the scan.
+function scanLifelog(src) {
   const lines = src.replace(/\r\n?/g, '\n').split('\n');
   const entries = [];
-  let current = null;
+  const problems = [];
+  let sink = null; // the record or problem that the following lines belong to
   let fence = null;
-  for (const line of lines) {
+  let offset = 0;
+  lines.forEach((line, index) => {
+    const start = offset;
+    offset += line.length + 1;
     const match = !fence && line.match(LIFELOG_ENTRY_RE);
-    if (match) {
-      const written = lifelogDate(match[1]);
-      const recordedTime = lifelogTime(match[2], match[3]);
-      if (!written || !recordedTime) return null;
-      current = { written, recordedTime, event: written, time: recordedTime,
-        content: match[4] || '', backfill: false, sequence: entries.length };
-      entries.push(current);
-      const openingFence = current.content.match(/^ {0,3}(`{3,}|~{3,})/);
-      if (openingFence) fence = openingFence[1];
-    } else if (current) {
+    const written = match && lifelogDate(match[1]);
+    const recordedTime = match && lifelogTime(match[2], match[3]);
+    if (written && recordedTime) {
+      const content = match[4] || '';
+      sink = { line: index + 1, start, contentStart: start + line.length - content.length, end: start + line.length,
+        written, recordedTime, event: written, time: recordedTime, content, backfill: false, sequence: entries.length };
+      entries.push(sink);
+      fence = nextFence(null, content);
+    } else if (match || (!fence && LIFELOG_NEAR_RE.test(line))) {
+      sink = { kind: match ? 'value' : 'shape', line: index + 1, start, end: start + line.length, text: line };
+      problems.push(sink);
+      fence = null;
+    } else if (sink && sink.kind) {
+      sink.text += '\n' + line;
+      fence = nextFence(fence, line.startsWith('  ') ? line.slice(2) : line);
+    } else if (sink) {
       // The bot indents continuation lines by two spaces. Keep fenced content intact.
       const continuation = line.startsWith('  ') ? line.slice(2) : line;
-      current.content += '\n' + continuation;
-      const marker = continuation.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
-      if (marker) {
-        if (!fence) fence = marker[1];
-        else if (marker[1][0] === fence[0] && marker[1].length >= fence.length && !marker[2].trim()) fence = null;
-      }
+      sink.content += '\n' + continuation;
+      if (line.trim()) sink.end = start + line.length;
+      fence = nextFence(fence, continuation);
     } else if (line.trim()) {
-      return null;
+      sink = { kind: 'leading', line: index + 1, start, end: start + line.length, text: line };
+      problems.push(sink);
     }
-  }
-  if (!entries.length) return null;
+  });
 
   entries.forEach(entry => {
-    const match = entry.content.match(/^[ \t]*(\d{6})(?:[ \t]+(\d{1,2})[:：](\d{2}))?(?=[ \t]|\n|$)/);
-    if (!match) return;
-    const event = lifelogDate(match[1]);
-    const days = event && (entry.written.stamp - event.stamp) / 86400000;
+    const code = lifelogCode(entry.content, entry.written);
     // Match the bot's backfill rule: a valid earlier date, within 365 days.
-    if (!event || days <= 0 || days > 365) return;
-    entry.event = event;
-    entry.backfill = true;
-    entry.time = match[2] === undefined ? null : lifelogTime(match[2], match[3]);
-    // An invalid event time remains part of the content, as it does in the bot.
-    const prefixLength = entry.time ? match[0].length : match[0].indexOf(match[1]) + 6;
-    entry.content = entry.content.slice(prefixLength).trim();
+    if (code && code.event.stamp < entry.written.stamp) {
+      entry.event = code.event;
+      entry.backfill = true;
+      entry.time = code.time;
+      entry.content = entry.content.slice(code.length).trim();
+    }
+    entry.segments = lifelogSegments(entry);
   });
+  // Source order is kept in `records` for finding the record under the cursor.
+  const records = entries.slice();
   entries.sort((a, b) => a.event.stamp - b.event.stamp
     || Number(a.time === null) - Number(b.time === null)
     || (a.time || '').localeCompare(b.time || '') || a.sequence - b.sequence);
-  return entries;
+  return { entries, records, problems };
 }
 
-function renderLifelogPreview(src) {
-  const entries = parseLifelog(src);
-  if (!entries) return null;
+// The save paths keep the earlier, stricter test, read on its own rather than derived from the
+// tolerant scan: every record line valid, nothing before the first record, at least one record.
+function isStrictLifelog(src) {
+  let records = 0;
+  let fence = null;
+  for (const line of src.replace(/\r\n?/g, '\n').split('\n')) {
+    const match = !fence && line.match(LIFELOG_ENTRY_RE);
+    if (match) {
+      if (!lifelogDate(match[1]) || !lifelogTime(match[2], match[3])) return false;
+      records++;
+      fence = nextFence(null, match[4] || '');
+    } else if (records) {
+      fence = nextFence(fence, line.startsWith('  ') ? line.slice(2) : line);
+    } else if (line.trim()) {
+      return false;
+    }
+  }
+  return records > 0;
+}
+
+// A document is read as a lifelog when it starts with a record, or is a month file with
+// records in it. Other Markdown keeps its normal preview and gets no format diagnosis.
+function lifelogDocument(src) {
+  const scan = scanLifelog(src);
+  if (!scan.entries.length && scan.problems.every(problem => problem.kind === 'leading')) return null;
+  const leading = scan.problems.some(problem => problem.kind === 'leading');
+  return !leading || LIFELOG_MONTH_FILE_RE.test(currentFilename) ? scan : null;
+}
+
+function escapeHtml(text) {
+  return text.replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
+}
+
+function renderLifelogProblems(problems) {
+  if (!problems.length) return '';
+  const rows = problems.map(problem =>
+    `<li class="lifelog-problem" data-line="${problem.line}"><div class="lifelog-problem-head"><strong>第 ${problem.line} 行</strong><span>${LIFELOG_PROBLEM_LABELS[problem.kind]}</span><button class="lifelog-edit" data-problem="${problem.line}" aria-label="到原文第 ${problem.line} 行修正" title="到原文修正">✎</button></div><pre>${escapeHtml(problem.text.trimEnd())}</pre></li>`).join('');
+  return `<section class="lifelog-problems" aria-label="格式問題"><h2>⚠ 格式問題 ${problems.length} 處</h2><p>以下原文無法當成正常記錄，未列入日期分組；內容未變更，請到原文修正。</p><ol>${rows}</ol></section>`;
+}
+
+function renderLifelogPreview(scan) {
+  const problems = renderLifelogProblems(scan.problems);
+  if (!scan.entries.length) return problems + '<div class="lifelog-summary">沒有可讀取的日期記錄，以下顯示原文預覽。</div>' + parseMd(editor.value);
   const days = new Map();
-  entries.forEach(entry => {
+  scan.entries.forEach(entry => {
     const key = entry.event.iso;
     if (!days.has(key)) days.set(key, []);
     days.get(key).push(entry);
@@ -606,11 +730,15 @@ function renderLifelogPreview(src) {
         : `<time datetime="${date}T${entry.time}">${entry.time}</time>`;
       const recorded = entry.backfill
         ? `<div class="lifelog-recorded">↳ <time datetime="${entry.written.iso}T${entry.recordedTime}">${entry.written.iso.replace(/-/g, '/')} ${entry.recordedTime}</time> 補記</div>` : '';
-      return `<li class="lifelog-entry"><div class="lifelog-entry-time${entry.time === null ? ' unknown' : ''}">${time}</div><div class="lifelog-entry-body">${parseMd(entry.content)}${recorded}</div></li>`;
+      const body = entry.segments.map(segment => segment.todo
+        ? `<div class="lifelog-todo-row"><span class="lifelog-todo">待辦記錄</span><div class="lifelog-todo-text">${parseMd(segment.text)}</div></div>`
+        : parseMd(segment.text)).join('');
+      return `<li class="lifelog-entry" data-line="${entry.line}"><div class="lifelog-entry-time${entry.time === null ? ' unknown' : ''}">${time}<button class="lifelog-edit" data-entry="${entry.line}" aria-label="編輯這筆記錄" title="編輯這筆記錄">✎</button></div><div class="lifelog-entry-body">${body}${recorded}</div></li>`;
     }).join('');
     return `<section class="lifelog-day" data-event-date="${date}" aria-label="${date} 的記錄"><h2 class="lifelog-day-title"><time datetime="${date}">${date.replace(/-/g, '/')}（${weekday}）</time><span class="lifelog-day-count">${records.length} 筆</span></h2><ol class="lifelog-entries">${rows}</ol></section>`;
-  }).join('');
-  return `<div class="lifelog-summary">依發生日期整理 · ${days.size} 天 · ${entries.length} 筆</div>${groups}`;
+  });
+  if (notesNewestFirst) groups.reverse();
+  return `<div class="lifelog-summary"><span>依發生日期整理 · ${days.size} 天 · ${scan.entries.length} 筆</span><button class="lifelog-order" onclick="toggleNotesOrder()" aria-pressed="${notesNewestFirst}">最新在前</button></div>${problems}${groups.join('')}`;
 }
 
 // ── State ──
@@ -640,6 +768,11 @@ let pendingBase = null;
 let boundFilename = null;
 let loadedAt = null;
 let saving = false;
+// Notes reading state. lifelogInfo is the scan of the current text when it reads as a lifelog.
+let lifelogInfo = null;
+let notesNewestFirst = false;
+// Where the reader was in notes before jumping to the source: the row's distance from the top of the pane.
+let notesReturn = null;
 
 function normalizeFilename(name) {
   const clean = name.trim().replace(/[\\/:*?"<>|\u0000-\u001f]/g, '-');
@@ -670,11 +803,13 @@ function persistDraft() {
   } catch(e) { draftSaved = false; }
   if (!draftSaved) { draftStatus.textContent = '無法保存瀏覽器草稿 · 請匯出 .md'; return; }
   const loaded = baseContent !== null && loadedAt ? ` · 原檔載入於 ${formatLoadedAt(loadedAt)}` : '';
-  const pending = !needsExport() ? ''
+  // A downloaded copy is not the original: say so until the original is saved or opened again.
+  const pending = !needsExport() ? (pendingBase !== null ? ' · 副本已下載，待替換原檔' : '')
     : fileHandle ? ' · 尚未儲存'
     : hasFsApi && baseContent !== null ? ' · 儲存前需重新選取原檔'
     : hasFsApi ? ' · 尚未儲存' : ' · 待匯出 .md';
-  draftStatus.textContent = (fileHandle ? '已連結原檔' : '草稿已存於此瀏覽器') + loaded + pending;
+  const problems = lifelogInfo && lifelogInfo.problems.length ? ` · ⚠ 格式問題 ${lifelogInfo.problems.length} 處` : '';
+  draftStatus.textContent = (fileHandle ? '已連結原檔' : '草稿已存於此瀏覽器') + loaded + pending + problems;
 }
 
 function commitFilename() {
@@ -752,9 +887,10 @@ let renderGeneration = 0; // tracks render epochs to discard stale async results
 
 function render() {
   renderGeneration++;
-  preview.innerHTML = currentView === 'notes'
-    ? renderLifelogPreview(editor.value) ?? '<div class="lifelog-summary">未找到日期記錄，以下顯示原文預覽。</div>' + parseMd(editor.value)
-    : parseMd(editor.value);
+  lifelogInfo = lifelogDocument(editor.value);
+  preview.innerHTML = currentView !== 'notes' ? parseMd(editor.value)
+    : lifelogInfo ? renderLifelogPreview(lifelogInfo)
+    : '<div class="lifelog-summary">這份文件不是 lifelog 記錄檔（需以 <code>- YYMMDD HH:MM</code> 記錄開頭，或檔名為 YYYY-MM.md 且含記錄），以下顯示原文預覽。</div>' + parseMd(editor.value);
   preview.querySelectorAll('table').forEach(table => {
     const wrapper = document.createElement('div');
     wrapper.className = 'table-scroll';
@@ -867,6 +1003,8 @@ function setView(v) {
   editorPane.style.borderRight = v === 'split' ? '1px solid var(--border)' : 'none';
   if (isReadingView(v)) editor.blur();
   if (changesNotes) render();
+  if (v === 'notes') restoreNotesPosition();
+  else if (v !== 'edit') setNotesReturn(null);
   if (searchBar.classList.contains('show')) doSearch();
   // When switching to a view that shows the preview, render mermaid blocks immediately
   if (v !== 'edit' && mermaidReady) {
@@ -876,6 +1014,87 @@ function setView(v) {
 }
 mobileLayout.addEventListener('change', () => {
   if (mobileLayout.matches && currentView === 'split') setView('preview');
+});
+
+// ── Notes: order, jump to source, return ──
+function scrollPreviewTo(el, top = 8) {
+  preview.scrollTop += el.getBoundingClientRect().top - preview.getBoundingClientRect().top - top;
+}
+
+function showLatestNotes() {
+  const days = preview.querySelectorAll('.lifelog-day');
+  if (notesNewestFirst || !days.length) preview.scrollTop = 0;
+  else scrollPreviewTo(days[days.length - 1]);
+}
+
+function toggleNotesOrder() {
+  notesNewestFirst = !notesNewestFirst;
+  try { localStorage.setItem('md-edit-notes-newest', notesNewestFirst ? '1' : '0'); } catch(e) {}
+  render();
+  showLatestNotes();
+}
+
+function setNotesReturn(state) {
+  notesReturn = state;
+  document.querySelector('.btn[data-view="notes"]').textContent = state ? '↩ 筆記' : '▤ 筆記';
+}
+
+// Pixel position of a text offset inside the textarea, measured with a mirror element
+// because wrapped lines make a line count unreliable on narrow screens.
+function editorOffsetTop(pos) {
+  const cs = getComputedStyle(editor);
+  const mirror = document.createElement('div');
+  Object.assign(mirror.style, {
+    position: 'absolute', visibility: 'hidden', top: '0', left: '-9999px', boxSizing: 'border-box',
+    width: editor.clientWidth + 'px', padding: cs.padding, fontFamily: cs.fontFamily, fontSize: cs.fontSize,
+    fontWeight: cs.fontWeight, lineHeight: cs.lineHeight, letterSpacing: cs.letterSpacing, tabSize: cs.tabSize,
+    whiteSpace: 'pre-wrap', overflowWrap: 'break-word',
+  });
+  mirror.textContent = editor.value.slice(0, pos);
+  const caret = document.createElement('span');
+  caret.textContent = '\u200b';
+  mirror.appendChild(caret);
+  document.body.appendChild(mirror);
+  const top = caret.offsetTop;
+  mirror.remove();
+  return top;
+}
+
+// Opens the source at a record or problem line taken from the current scan, so the range is never stale.
+function editFromNotes(button) {
+  if (!lifelogInfo) return;
+  const line = Number(button.dataset.entry || button.dataset.problem);
+  const entry = button.dataset.entry && lifelogInfo.entries.find(e => e.line === line);
+  const problem = button.dataset.problem && lifelogInfo.problems.find(p => p.line === line);
+  if (!entry && !problem) return;
+  // A record selects its content and leaves the recording timestamp alone; a problem selects its first line.
+  const from = entry ? entry.contentStart : problem.start;
+  const to = entry ? entry.end : problem.start + problem.text.split('\n')[0].length;
+  const row = button.closest('[data-line]');
+  const state = { top: row.getBoundingClientRect().top - preview.getBoundingClientRect().top, scrollTop: preview.scrollTop };
+  setView('edit');
+  setNotesReturn(state);
+  editor.scrollTop = Math.max(0, editorOffsetTop(from) - editor.clientHeight / 3);
+  editor.focus({ preventScroll: true });
+  editor.setSelectionRange(from, to);
+}
+
+// Back in notes, find the record under the cursor again: it may have moved to another day.
+function restoreNotesPosition() {
+  if (!notesReturn) return;
+  const { top, scrollTop } = notesReturn;
+  setNotesReturn(null);
+  const caret = editor.selectionStart;
+  const at = lifelogInfo && [...lifelogInfo.records, ...lifelogInfo.problems]
+    .filter(item => item.start <= caret).sort((a, b) => b.start - a.start)[0];
+  const row = at && preview.querySelector(`[data-line="${at.line}"]`);
+  if (row) scrollPreviewTo(row, top);
+  else preview.scrollTop = scrollTop;
+}
+
+preview.addEventListener('click', e => {
+  const button = e.target.closest('.lifelog-edit');
+  if (button) editFromNotes(button);
 });
 
 // ── Theme ──
@@ -1202,6 +1421,7 @@ function newFile() {
   exportedFilename = null;
   hasUserContent = false;
   fileHandle = baseContent = pendingBase = boundFilename = loadedAt = null;
+  setNotesReturn(null);
   closeMore();
   setView('edit');
   render();
@@ -1240,9 +1460,15 @@ function loadFile(file, handle = null) {
     boundFilename = currentFilename;
     loadedAt = Date.now();
     editor.scrollTop = preview.scrollTop = 0;
+    setNotesReturn(null);
     render();
-    if (mobileLayout.matches) setView('preview');
-    showToast(`已開啟 ${file.name}`);
+    // A lifelog opens on its latest day in notes, or on its format problems when no record
+    // can be read; other documents keep the usual view.
+    if (lifelogInfo) {
+      setView('notes');
+      showLatestNotes();
+    } else if (mobileLayout.matches || currentView === 'notes') setView(mobileLayout.matches ? 'preview' : 'split');
+    showToast(`已開啟 ${file.name}` + problemNote());
   }, () => showToast('檔案讀取失敗'));
 }
 
@@ -1266,7 +1492,7 @@ function downloadMd() {
   exportedFilename = currentFilename;
   if (baseContent !== null) pendingBase = editor.value;
   render();
-  showToast('已準備下載副本；原始檔案需自行替換');
+  showToast('已準備下載副本；原始檔案需自行替換' + problemNote());
 }
 
 // ── Save back ──
@@ -1275,7 +1501,7 @@ function downloadMd() {
 // to the original stops the save.
 // A month file must end with a newline, or the bot's next record joins the last line.
 function withFinalNewline(text) {
-  return text && !text.endsWith('\n') && parseLifelog(text) ? text + '\n' : text;
+  return text && !text.endsWith('\n') && isStrictLifelog(text) ? text + '\n' : text;
 }
 
 function mergeAppended(base, disk, edited) {
@@ -1331,6 +1557,12 @@ function showMerged(content) {
 
 function addedNote(added) { return added ? `，並保留 ${added} 筆新增記錄` : ''; }
 
+// Saving never rewrites or blocks on format problems; it reports them.
+function problemNote() {
+  const scan = lifelogDocument(editor.value);
+  return scan && scan.problems.length ? `；有 ${scan.problems.length} 處格式問題` : '';
+}
+
 async function writeHandle(handle, content) {
   const writable = await handle.createWritable();
   await writable.write(content);
@@ -1357,7 +1589,7 @@ async function saveBack() {
       currentFilename = boundFilename = normalizeFilename(handle.name);
       filenameInput.value = currentFilename;
       baseContent = editor.value;
-      showToast(`已儲存 ${handle.name}`);
+      showToast(`已儲存 ${handle.name}` + problemNote());
     } else {
       let handle = fileHandle;
       if (!handle) {
@@ -1378,7 +1610,7 @@ async function saveBack() {
       }
       showMerged(merged.content);
       baseContent = merged.content;
-      showToast(`已存回 ${handle.name}` + addedNote(merged.added));
+      showToast(`已存回 ${handle.name}` + addedNote(merged.added) + problemNote());
     }
     pendingBase = null;
     loadedAt = Date.now();
@@ -1412,7 +1644,7 @@ document.getElementById('verifyInput').addEventListener('change', async e => {
   exportedContent = editor.value;
   exportedFilename = currentFilename;
   render();
-  showToast(`已核對原檔${addedNote(merged.added)}；請用下載的副本替換原檔`);
+  showToast(`已核對原檔${addedNote(merged.added)}；請用下載的副本替換原檔` + problemNote());
 });
 function downloadHtml() {
   commitFilename();
@@ -1515,6 +1747,7 @@ document.addEventListener('drop', e => {
     const savedNoOl = localStorage.getItem('md-edit-no-ol');
     if (savedNoOl !== null) noOl = savedNoOl === '1';
     isDark = localStorage.getItem('md-edit-dark') === '1';
+    notesNewestFirst = localStorage.getItem('md-edit-notes-newest') === '1';
   } catch(e) {}
   filenameInput.value = currentFilename;
   if (hasFsApi) {
